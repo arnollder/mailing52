@@ -1,0 +1,150 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme static {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "IBM Plex Serif", ui-serif, Georgia, serif;
+
+  /* Soft green primary */
+  --color-moss-50: #f0fdf4;
+  --color-moss-100: #dcfce7;
+  --color-moss-200: #bbf7d0;
+  --color-moss-300: #86efac;
+  --color-moss-400: #4ade80;
+  --color-moss-500: #22c55e;
+  --color-moss-600: #16a34a;
+  --color-moss-700: #15803d;
+  --color-moss-800: #166534;
+  --color-moss-900: #14532d;
+  --color-moss-950: #052e16;
+
+  /* Warm soft alert (not neon) */
+  --color-ember-50: #fff7ed;
+  --color-ember-100: #ffedd5;
+  --color-ember-200: #fed7aa;
+  --color-ember-300: #fdba74;
+  --color-ember-400: #fb923c;
+  --color-ember-500: #f97316;
+  --color-ember-600: #ea580c;
+  --color-ember-700: #c2410c;
+  --color-ember-800: #9a3412;
+  --color-ember-900: #7c2d12;
+  --color-ember-950: #431407;
+}
+
+:root {
+  --desk-bg: #070907;
+  --desk-elevated: #0e120f;
+  --desk-surface: #121816;
+  --desk-surface-2: #181f1c;
+  --desk-ink: #e8f0ea;
+  --desk-muted: #8fa396;
+  --desk-line: #243029;
+  --desk-glow: rgba(34, 197, 94, 0.12);
+  --desk-glow-strong: rgba(74, 222, 128, 0.18);
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--desk-bg);
+  color: var(--desk-ink);
+}
+
+.font-display {
+  font-family: var(--font-serif);
+}
+
+/* Soft ambient wash — welcoming, not neon */
+.desk-shell {
+  background:
+    radial-gradient(ellipse 80% 50% at 0% 0%, var(--desk-glow) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(22, 163, 74, 0.08) 0%, transparent 50%),
+    var(--desk-bg);
+}
+
+.desk-surface {
+  background: var(--desk-surface);
+  border: 1px solid var(--desk-line);
+  border-radius: 1rem;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+.desk-surface-soft {
+  background: linear-gradient(160deg, var(--desk-surface-2) 0%, var(--desk-surface) 100%);
+  border: 1px solid var(--desk-line);
+  border-radius: 1rem;
+}
+
+@keyframes desk-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.desk-page-enter {
+  animation: desk-fade 220ms ease-out both;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 200ms;
+  animation-timing-function: ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desk-page-enter {
+    animation: none;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+  }
+
+  .flyer-card:hover .flyer-preview {
+    transform: none !important;
+  }
+}
+
+.desk-rail-link {
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.flyer-card {
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.flyer-card:hover {
+  border-color: rgba(74, 222, 128, 0.35);
+  box-shadow: 0 8px 28px -12px var(--desk-glow-strong);
+}
+
+.flyer-card .flyer-preview {
+  transition: transform 200ms ease-out;
+}
+
+.flyer-card:hover .flyer-preview {
+  transform: scale(1.025);
+}
+
+.flyer-preview-meeting {
+  background: linear-gradient(165deg, #14532d 0%, #052e16 55%, #0a0f0c 100%);
+}
+
+.flyer-preview-seminar {
+  background: linear-gradient(165deg, #166534 0%, #0a1f14 55%, #070907 100%);
+}
+
+.flyer-preview-anniversary {
+  background: linear-gradient(165deg, #15803d 0%, #14532d 45%, #0a0f0c 100%);
+}
+
+.channel-dot-online {
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+}
