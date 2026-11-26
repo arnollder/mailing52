@@ -1,0 +1,237 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "IBM Plex Serif", ui-serif, Georgia, serif;
+
+  --color-moss-200: #bbf7d0;
+  --color-moss-300: #86efac;
+  --color-moss-400: #4ade80;
+  --color-moss-500: #22c55e;
+
+  --color-ember-200: #fed7aa;
+  --color-ember-400: #fb923c;
+  --color-ember-500: #f97316;
+
+  --color-warning: #fbbf24;
+}
+
+:root {
+  --desk-bg: #070907;
+  --desk-elevated: #0e120f;
+  --desk-surface: #121816;
+  --desk-surface-2: #181f1c;
+  --desk-ink: #e8f0ea;
+  --desk-muted: #8fa396;
+  --desk-line: #243029;
+  --desk-glow: rgba(34, 197, 94, 0.12);
+  --desk-glow-strong: rgba(74, 222, 128, 0.18);
+  color-scheme: dark;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+  background: var(--desk-bg);
+  color: var(--desk-ink);
+  font-family: var(--font-sans);
+}
+
+.font-display {
+  font-family: var(--font-serif);
+}
+
+.desk-shell {
+  background:
+    radial-gradient(ellipse 80% 50% at 0% 0%, var(--desk-glow) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(22, 163, 74, 0.08) 0%, transparent 50%),
+    var(--desk-bg);
+}
+
+.desk-surface {
+  background: var(--desk-surface);
+  border: 1px solid var(--desk-line);
+  border-radius: 1rem;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+.desk-surface-soft {
+  background: linear-gradient(160deg, var(--desk-surface-2) 0%, var(--desk-surface) 100%);
+  border: 1px solid var(--desk-line);
+  border-radius: 1rem;
+}
+
+.desk-page-enter {
+  animation: desk-fade 220ms ease-out both;
+}
+
+@keyframes desk-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 0.5rem 0.9rem;
+  transition: background-color 140ms ease, border-color 140ms ease, opacity 140ms ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: color-mix(in oklab, var(--color-moss-500) 22%, transparent);
+  color: var(--color-moss-300);
+  border-color: color-mix(in oklab, var(--color-moss-400) 35%, transparent);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-moss-500) 32%, transparent);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--desk-muted);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: color-mix(in oklab, white 4%, transparent);
+  color: var(--desk-ink);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--desk-ink);
+  border-color: var(--desk-line);
+}
+
+.btn-outline:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--color-moss-400) 40%, transparent);
+}
+
+.btn-danger {
+  background: color-mix(in oklab, var(--color-ember-500) 18%, transparent);
+  color: #fdba74;
+  border-color: color-mix(in oklab, var(--color-ember-400) 35%, transparent);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-ember-500) 28%, transparent);
+}
+
+.btn-sm {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8125rem;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.field-label {
+  font-size: 0.75rem;
+  color: var(--desk-muted);
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--desk-line);
+  background: var(--desk-elevated);
+  color: var(--desk-ink);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: color-mix(in oklab, var(--color-moss-400) 45%, transparent);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 0.5rem;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.6875rem;
+  background: color-mix(in oklab, white 5%, transparent);
+  color: var(--desk-muted);
+  border: 1px solid var(--desk-line);
+}
+
+.flyer-card {
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.flyer-card:hover {
+  border-color: rgba(74, 222, 128, 0.35);
+  box-shadow: 0 8px 28px -12px var(--desk-glow-strong);
+}
+
+.flyer-card .flyer-preview {
+  transition: transform 200ms ease-out;
+}
+
+.flyer-card:hover .flyer-preview {
+  transform: scale(1.025);
+}
+
+.flyer-preview-meeting {
+  background: linear-gradient(165deg, #14532d 0%, #052e16 55%, #0a0f0c 100%);
+}
+
+.flyer-preview-seminar {
+  background: linear-gradient(165deg, #166534 0%, #0a1f14 55%, #070907 100%);
+}
+
+.flyer-preview-anniversary {
+  background: linear-gradient(165deg, #15803d 0%, #14532d 45%, #0a0f0c 100%);
+}
+
+.channel-dot-online {
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desk-page-enter,
+  .flyer-card,
+  .flyer-card .flyer-preview {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .flyer-card:hover .flyer-preview {
+    transform: none !important;
+  }
+}

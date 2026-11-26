@@ -37,9 +37,8 @@ export interface UrgentMessage {
 export interface MessengerChannel {
   id: Channel
   name: string
-  icon: string
+  short: string
   status: ChannelStatus
-  /** Один чат рассылки на всю местность М52 */
   chatTitle: string
   chatId: string
   hint: string
@@ -166,16 +165,16 @@ export const messengers: MessengerChannel[] = [
   {
     id: 'telegram',
     name: 'Telegram',
-    icon: 'i-simple-icons-telegram',
-    status: 'connected',
+    short: 'TG',
+    status: 'pending',
     chatTitle: 'Digital М52 · рассылка',
-    chatId: '-1001234567890',
-    hint: 'Один чат местности · бот @mailing52_bot'
+    chatId: '',
+    hint: 'Один чат местности · нужен токен и chat_id'
   },
   {
     id: 'max',
     name: 'MAX',
-    icon: 'i-lucide-message-circle',
+    short: 'MX',
     status: 'pending',
     chatTitle: 'Digital М52 · рассылка',
     chatId: '',
@@ -184,7 +183,7 @@ export const messengers: MessengerChannel[] = [
   {
     id: 'whatsapp',
     name: 'WhatsApp',
-    icon: 'i-simple-icons-whatsapp',
+    short: 'WA',
     status: 'offline',
     chatTitle: 'Digital М52 · рассылка',
     chatId: '',
@@ -199,8 +198,8 @@ export const eventTypeLabel: Record<EventType, string> = {
   other: 'Другое'
 }
 
-export const channelMeta: Record<Channel, { label: string, icon: string, color: 'info' | 'primary' | 'success' }> = {
-  telegram: { label: 'Telegram', icon: 'i-simple-icons-telegram', color: 'info' },
-  max: { label: 'MAX', icon: 'i-lucide-message-circle', color: 'primary' },
-  whatsapp: { label: 'WhatsApp', icon: 'i-simple-icons-whatsapp', color: 'success' }
+export const channelMeta: Record<Channel, { label: string, short: string }> = {
+  telegram: { label: 'Telegram', short: 'TG' },
+  max: { label: 'MAX', short: 'MX' },
+  whatsapp: { label: 'WhatsApp', short: 'WA' }
 }
