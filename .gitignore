@@ -5,7 +5,6 @@ dist
 .nuxt
 .nitro
 .cache
-server
 
 # Node
 node_modules

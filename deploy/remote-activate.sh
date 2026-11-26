@@ -1,28 +1,40 @@
 #!/usr/bin/env bash
-# Запускается на VPS после rsync. Статика Vue SPA на arnolder.ru.
+# Статика + API рассылки на arnolder.ru
 set -euo pipefail
 
 APP=/opt/mailing52
 DOMAIN=arnolder.ru
+PORT=3012
 
-mkdir -p "$APP/dist" /var/www/html
+id mailing52 &>/dev/null || useradd --system --home "$APP" --shell /usr/sbin/nologin mailing52
 
-# Старый Nuxt/Node и Arnolder Stack больше не нужны
-if systemctl list-unit-files | grep -q '^mailing52.service'; then
-  systemctl disable --now mailing52 2>/dev/null || true
-fi
+mkdir -p "$APP/dist" "$APP/server" /var/www/html
+
 if systemctl list-unit-files | grep -q '^arnolder.service'; then
   systemctl disable --now arnolder 2>/dev/null || true
 fi
-fuser -k 3012/tcp 2>/dev/null || true
+# старый Nuxt unit
+if systemctl list-unit-files | grep -q '^mailing52.service'; then
+  systemctl disable --now mailing52 2>/dev/null || true
+fi
 fuser -k 3000/tcp 2>/dev/null || true
 
-# Корень arnolder.ru → статика mailing52
+chown -R mailing52:mailing52 "$APP"
+chmod 600 "$APP/.env" 2>/dev/null || true
+
+cp "$APP/deploy/mailing52-api.service" /etc/systemd/system/mailing52-api.service
+systemctl daemon-reload
+systemctl enable mailing52-api
+systemctl restart mailing52-api
+sleep 1
+systemctl is-active mailing52-api
+curl -sf "http://127.0.0.1:${PORT}/api/health" || true
+echo
+
 cp "$APP/deploy/nginx-arnolder.conf" /etc/nginx/sites-available/arnolder
 ln -sfn /etc/nginx/sites-available/arnolder /etc/nginx/sites-enabled/arnolder
 rm -f /etc/nginx/sites-enabled/default
 
-# Старый сабдомен → редирект на корень
 if [[ -f /etc/letsencrypt/live/arnolder.ru/fullchain.pem ]]; then
   cp "$APP/deploy/nginx-mailing52-redirect.conf" /etc/nginx/sites-available/mailing52
   ln -sfn /etc/nginx/sites-available/mailing52 /etc/nginx/sites-enabled/mailing52
@@ -32,4 +44,4 @@ nginx -t
 systemctl reload nginx
 
 test -f "$APP/dist/index.html"
-echo "OK: mailing52 static → https://${DOMAIN} (node stopped)"
+echo "OK: static + api :${PORT} → https://${DOMAIN}"

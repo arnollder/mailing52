@@ -8,12 +8,12 @@ import { channelMeta, urgentHistory, type Channel } from '@/data/mock'
 const toast = useToast()
 const text = ref('')
 const sending = ref(false)
-const channels = ref<Channel[]>(['telegram', 'max', 'whatsapp'])
+const channels = ref<Channel[]>(['max'])
 const confirmOpen = ref(false)
 
 const channelOptions: { label: string, value: Channel, description: string }[] = [
   { label: 'Telegram', value: 'telegram', description: 'чат рассылки · ждёт ключ' },
-  { label: 'MAX', value: 'max', description: 'канал @se15171561_biz' },
+  { label: 'MAX', value: 'max', description: 'канал @se15171561_biz · живо' },
   { label: 'WhatsApp', value: 'whatsapp', description: 'чат рассылки · офлайн' }
 ]
 
@@ -30,14 +30,55 @@ async function sendNow() {
   if (!canSend.value) return
   sending.value = true
   confirmOpen.value = false
-  await new Promise(r => setTimeout(r, 600))
-  toast.add({
-    title: 'Срочное ушло в чаты',
-    description: channels.value.map(c => channelMeta[c].label).join(', '),
-    tone: 'success'
-  })
-  text.value = ''
-  sending.value = false
+  try {
+    const res = await fetch('/api/urgent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: text.value.trim(),
+        channels: channels.value
+      })
+    })
+    const data = await res.json().catch(() => ({})) as {
+      ok?: boolean
+      allOk?: boolean
+      error?: string
+      results?: Record<string, { ok?: boolean, error?: string, url?: string }>
+    }
+
+    if (!res.ok || !data.ok) {
+      const parts = Object.entries(data.results || {})
+        .map(([k, v]) => `${channelMeta[k as Channel]?.label || k}: ${v.ok ? 'ok' : (v.error || 'fail')}`)
+      toast.add({
+        title: 'Не ушло',
+        description: parts.join(' · ') || data.error || `HTTP ${res.status}`,
+        tone: 'error'
+      })
+      return
+    }
+
+    const okLabels = channels.value
+      .filter(c => data.results?.[c]?.ok)
+      .map(c => channelMeta[c].label)
+    const failLabels = channels.value
+      .filter(c => !data.results?.[c]?.ok)
+      .map(c => `${channelMeta[c].label}: ${data.results?.[c]?.error || 'нет'}`)
+
+    toast.add({
+      title: data.allOk ? 'Срочное ушло' : 'Ушло частично',
+      description: [...okLabels, ...failLabels].join(' · '),
+      tone: data.allOk ? 'success' : 'warning'
+    })
+    text.value = ''
+  } catch (err) {
+    toast.add({
+      title: 'Сеть / API',
+      description: err instanceof Error ? err.message : 'ошибка запроса',
+      tone: 'error'
+    })
+  } finally {
+    sending.value = false
+  }
 }
 </script>
 

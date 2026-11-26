@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "api": "NODE_TLS_REJECT_UNAUTHORIZED=0 node server/index.mjs",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "max:send": "NODE_TLS_REJECT_UNAUTHORIZED=0 node scripts/max-send.mjs"
