@@ -13,7 +13,7 @@ const confirmOpen = ref(false)
 
 const channelOptions: { label: string, value: Channel, description: string }[] = [
   { label: 'Telegram', value: 'telegram', description: 'чат рассылки · ждёт ключ' },
-  { label: 'MAX', value: 'max', description: 'чат рассылки · ждёт ключ' },
+  { label: 'MAX', value: 'max', description: 'канал @se15171561_biz' },
   { label: 'WhatsApp', value: 'whatsapp', description: 'чат рассылки · офлайн' }
 ]
 

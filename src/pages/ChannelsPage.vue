@@ -3,6 +3,7 @@ import { reactive } from 'vue'
 import { Save } from 'lucide-vue-next'
 import PageShell from '@/components/PageShell.vue'
 import { useToast } from '@/composables/useToast'
+import { maxChannel } from '@/config/max'
 import { messengers } from '@/data/mock'
 
 const toast = useToast()
@@ -11,7 +12,7 @@ const secrets = reactive({
   telegramToken: '',
   telegramChatId: messengers.find(m => m.id === 'telegram')?.chatId ?? '',
   maxToken: '',
-  maxChatId: '',
+  maxChatId: maxChannel.chatId,
   greenId: '',
   greenToken: '',
   whatsappChatId: ''
@@ -38,9 +39,9 @@ const needs = [
   {
     title: 'MAX',
     items: [
-      'Один чат рассылки местности в MAX',
-      'Бот в кабинете MAX + токен',
-      'ID этого чата'
+      `Канал ${maxChannel.link}`,
+      `Бот @${maxChannel.botUsername}`,
+      `chat_id ${maxChannel.chatId} · токен в .env (не в репо)`
     ]
   },
   {

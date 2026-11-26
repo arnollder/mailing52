@@ -175,10 +175,10 @@ export const messengers: MessengerChannel[] = [
     id: 'max',
     name: 'MAX',
     short: 'MX',
-    status: 'pending',
-    chatTitle: 'Digital М52 · рассылка',
-    chatId: '',
-    hint: 'Один чат местности · нужен токен и chat id'
+    status: 'connected',
+    chatTitle: 'Рассылка Анонимные Наркоманы М52',
+    chatId: '-81705608563217',
+    hint: 'Канал @se15171561_biz · бот @se15171561_bot'
   },
   {
     id: 'whatsapp',
