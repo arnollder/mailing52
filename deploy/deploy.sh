@@ -38,17 +38,17 @@ rsync -az --delete \
   ./deploy/ "$HOST:$REMOTE_APP/deploy/"
 
 if [[ -f .env ]]; then
-  echo "==> Sync .env (secrets)"
+  echo "==> Merge .env → прод (remote keys не затираем пустым локалом)"
   # Локальные флаги/пути не тащим на прод — иначе Baileys не поднимется или возьмёт не тот auth
   tmp_env="$(mktemp)"
   grep -vE '^(WA_SKIP_CONNECT|WA_ALLOW_CONNECT|WA_PROFILE|WA_AUTH_DIR|WA_AUTH_DIR_LOCAL|WA_DEVICE_NAME)=' ./.env > "$tmp_env" || true
-  {
-    echo "WA_PROFILE=prod"
-    echo "WA_AUTH_DIR=.wa-auth"
-  } >> "$tmp_env"
-  rsync -az -e "ssh ${SSH_OPTS[*]}" "$tmp_env" "$HOST:$REMOTE_APP/.env"
+  rsync -az -e "ssh ${SSH_OPTS[*]}" "$tmp_env" "$HOST:/tmp/mailing52.env.fromlocal"
   rm -f "$tmp_env"
-  ssh "${SSH_OPTS[@]}" "$HOST" "chmod 600 $REMOTE_APP/.env && chown mailing52:mailing52 $REMOTE_APP/.env 2>/dev/null || chown root:root $REMOTE_APP/.env"
+  ssh "${SSH_OPTS[@]}" "$HOST" \
+    "python3 $REMOTE_APP/deploy/merge-env.py $REMOTE_APP/.env /tmp/mailing52.env.fromlocal \
+     && rm -f /tmp/mailing52.env.fromlocal \
+     && chmod 600 $REMOTE_APP/.env \
+     && (chown mailing52:mailing52 $REMOTE_APP/.env 2>/dev/null || chown root:root $REMOTE_APP/.env)"
 fi
 
 # Прод-сессия неприкосновенна. Локальный .wa-auth-local / чужой QR сюда не лей.
