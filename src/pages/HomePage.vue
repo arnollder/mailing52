@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { CalendarPlus, Megaphone, Radio, Upload } from 'lucide-vue-next'
 import PageShell from '@/components/PageShell.vue'
-import { channelMeta, flyers, groups, messengers, urgentHistory } from '@/data/mock'
+import { statusClass, statusLabel, useChannels } from '@/composables/useChannels'
+import { channelMeta, flyers, groups, urgentHistory } from '@/data/mock'
 
 const upcoming = [
   { title: 'Рабочее собрание Digital', when: '11 окт · 15:00', place: 'Антей' },
@@ -10,7 +12,8 @@ const upcoming = [
 ]
 
 const flyerInWork = flyers.filter(f => f.status !== 'sent').length
-const online = messengers.filter(m => m.status === 'connected').length
+const { channels, onlineCount } = useChannels()
+const channelTotal = computed(() => channels.value.length || 3)
 </script>
 
 <template>
@@ -19,7 +22,7 @@ const online = messengers.filter(m => m.status === 'connected').length
       <div class="hidden items-center gap-3 text-xs text-[var(--desk-muted)] sm:flex">
         <span class="inline-flex items-center gap-1.5">
           <span class="size-1.5 rounded-full bg-moss-500 channel-dot-online" />
-          {{ online }}/{{ messengers.length }}
+          {{ onlineCount }}/{{ channelTotal }}
         </span>
         <span>·</span>
         <span>{{ groups.length }} групп</span>
@@ -118,7 +121,7 @@ const online = messengers.filter(m => m.status === 'connected').length
             </div>
             <ul class="flex flex-col gap-2">
               <li
-                v-for="ch in messengers"
+                v-for="ch in channels"
                 :key="ch.id"
                 class="flex items-center gap-3 rounded-xl bg-[var(--desk-elevated)]/80 px-3.5 py-2.5 ring-1 ring-[var(--desk-line)]"
               >
@@ -135,9 +138,9 @@ const online = messengers.filter(m => m.status === 'connected').length
                 </div>
                 <span
                   class="text-[11px]"
-                  :class="ch.status === 'connected' ? 'text-moss-400' : ch.status === 'pending' ? 'text-warning' : 'text-[var(--desk-muted)]'"
+                  :class="statusClass(ch.status)"
                 >
-                  {{ ch.status === 'connected' ? 'онлайн' : ch.status === 'pending' ? 'ждёт ключ' : 'офлайн' }}
+                  {{ statusLabel(ch.status) }}
                 </span>
               </li>
             </ul>

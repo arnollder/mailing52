@@ -8,7 +8,7 @@ import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ensureWa, getWaQr, getWaStatus, sendWaText } from './wa.mjs'
+import { ensureWa, getWaGroupInfo, getWaQr, getWaStatus, sendWaText } from './wa.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -99,6 +99,7 @@ const server = createServer(async (req, res) => {
     return json(res, 200, {
       ok: true,
       max: Boolean(process.env.MAX_BOT_TOKEN && process.env.MAX_CHAT_ID),
+      telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
       whatsapp: {
         configured: wa.hasGroupJid,
         status: wa.status,
@@ -106,6 +107,113 @@ const server = createServer(async (req, res) => {
         lastError: wa.lastError
       }
     })
+  }
+
+  // Публичные статусы каналов (без токенов) — для UI «Каналы»
+  if (req.method === 'GET' && url.pathname === '/api/channels') {
+    try {
+      const wa = getWaStatus()
+      const waGroup = await getWaGroupInfo()
+
+      const tgToken = Boolean(process.env.TELEGRAM_BOT_TOKEN)
+      const tgChat = process.env.TELEGRAM_CHAT_ID || null
+      let telegramStatus = 'pending'
+      if (tgToken && tgChat) telegramStatus = 'connected'
+      else if (tgToken || tgChat) telegramStatus = 'offline'
+
+      const maxToken = Boolean(process.env.MAX_BOT_TOKEN)
+      const maxChat = process.env.MAX_CHAT_ID || null
+      let maxStatus = 'pending'
+      if (maxToken && maxChat) maxStatus = 'connected'
+      else if (maxToken || maxChat) maxStatus = 'offline'
+
+      let waStatus = 'offline'
+      if (wa.open) waStatus = 'connected'
+      else if (wa.status === 'qr' || wa.status === 'connecting') waStatus = 'pending'
+      else if (wa.hasGroupJid) waStatus = 'pending' // JID есть, сессия не open на этом процессе
+
+      return json(res, 200, {
+        ok: true,
+        channels: [
+          {
+            id: 'telegram',
+            name: 'Telegram',
+            short: 'TG',
+            status: telegramStatus,
+            title: process.env.TELEGRAM_CHAT_TITLE || 'Канал рассылки',
+            chatId: tgChat,
+            hasToken: tgToken,
+            link: process.env.TELEGRAM_CHANNEL_LINK || null,
+            botUsername: process.env.TELEGRAM_BOT_USERNAME || null,
+            hint: telegramStatus === 'connected'
+              ? 'Bot API · токен в .env'
+              : 'Нужны TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в .env',
+            detail: null,
+            needs: [
+              'Канал / супергруппа рассылки местности',
+              'Токен бота от @BotFather',
+              'Бот — админ с правом публиковать',
+              'TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID в .env на сервере'
+            ]
+          },
+          {
+            id: 'max',
+            name: 'MAX',
+            short: 'MX',
+            status: maxStatus,
+            title: process.env.MAX_CHANNEL_TITLE || 'Рассылка Анонимные Наркоманы М52',
+            chatId: maxChat,
+            hasToken: maxToken,
+            link: process.env.MAX_CHANNEL_LINK || 'https://max.ru/se15171561_biz',
+            botUsername: process.env.MAX_BOT_USERNAME || 'se15171561_bot',
+            hint: maxStatus === 'connected'
+              ? `Бот @${process.env.MAX_BOT_USERNAME || 'se15171561_bot'} · токен в .env`
+              : 'Нужны MAX_BOT_TOKEN и MAX_CHAT_ID в .env',
+            detail: null,
+            needs: [
+              `Канал ${process.env.MAX_CHANNEL_LINK || 'https://max.ru/se15171561_biz'}`,
+              `Бот @${process.env.MAX_BOT_USERNAME || 'se15171561_bot'}`,
+              'MAX_BOT_TOKEN + MAX_CHAT_ID в .env'
+            ]
+          },
+          {
+            id: 'whatsapp',
+            name: 'WhatsApp',
+            short: 'WA',
+            status: waStatus,
+            title: waGroup?.subject || process.env.WA_GROUP_TITLE || 'Группа рассылки',
+            chatId: wa.groupJid,
+            hasToken: false,
+            link: process.env.WA_INVITE_LINK || null,
+            botUsername: null,
+            hint: wa.open
+              ? `Baileys · сессия open${waGroup?.size != null ? ` · ${waGroup.size} уч.` : ''}`
+              : wa.status === 'qr'
+                ? 'Ждёт скана QR (/api/wa/qr)'
+                : 'Baileys · WA_GROUP_JID + сессия .wa-auth',
+            detail: wa.lastError || (wa.status !== 'open' ? `baileys:${wa.status}` : null),
+            needs: [
+              'Одна группа WhatsApp на местность',
+              'Сессия Baileys (.wa-auth) на сервере',
+              'WA_GROUP_JID=…@g.us в .env',
+              'Раз в ~14 дней открыть WA на телефоне'
+            ],
+            wa: {
+              session: wa.status,
+              open: wa.open,
+              qr: wa.lastQr,
+              authDir: wa.authDir,
+              size: waGroup?.size ?? null
+            }
+          }
+        ]
+      })
+    } catch (err) {
+      return json(res, 500, {
+        ok: false,
+        error: err instanceof Error ? err.message : 'channels error'
+      })
+    }
   }
 
   if (req.method === 'GET' && url.pathname === '/api/wa/status') {
@@ -191,7 +299,11 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`mailing52-api http://${HOST}:${PORT}`)
-  // Поднимаем WA-сессию заранее (QR появится в этом терминале, если нет .wa-auth)
+  // WA_SKIP_CONNECT=1 — не трогать сессию (удобно локально, пока прод держит Baileys)
+  if (process.env.WA_SKIP_CONNECT === '1') {
+    console.log('[wa] bootstrap skipped (WA_SKIP_CONNECT=1)')
+    return
+  }
   ensureWa().catch((err) => {
     console.warn('[wa] bootstrap:', err instanceof Error ? err.message : err)
   })

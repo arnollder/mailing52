@@ -9,10 +9,11 @@ import {
   Radio,
   X
 } from 'lucide-vue-next'
-import { messengers } from '@/data/mock'
+import { useChannels } from '@/composables/useChannels'
 
 const route = useRoute()
 const open = ref(false)
+const { channels, onlineCount } = useChannels()
 
 provide('openSidebar', () => {
   open.value = true
@@ -26,7 +27,7 @@ const items = [
   { label: 'Каналы', to: '/channels', icon: Radio }
 ]
 
-const onlineCount = computed(() => messengers.filter(m => m.status === 'connected').length)
+const channelTotal = computed(() => channels.value.length || 3)
 
 function isActive(path: string) {
   if (path === '/') return route.path === '/'
@@ -99,7 +100,7 @@ function close() {
             Каналы
           </p>
           <p class="text-[12px] text-[var(--desk-muted)]">
-            {{ onlineCount }} из {{ messengers.length }} каналов · по 1 чату
+            {{ onlineCount }} из {{ channelTotal }} каналов · по 1 чату
           </p>
         </div>
         <RouterLink

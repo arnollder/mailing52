@@ -50,6 +50,23 @@ export function getWaQr() {
   return lastQr
 }
 
+/** Мета группы рассылки (если сессия open). */
+export async function getWaGroupInfo(jid = process.env.WA_GROUP_JID) {
+  if (!jid) return null
+  if (status !== 'open' || !sock) return { id: jid, subject: null, size: null }
+  try {
+    const meta = await sock.groupMetadata(jid)
+    return {
+      id: meta.id,
+      subject: meta.subject || null,
+      size: meta.participants?.length ?? null,
+      announce: Boolean(meta.announce)
+    }
+  } catch {
+    return { id: jid, subject: null, size: null }
+  }
+}
+
 export async function ensureWa() {
   if (sock && status === 'open') return sock
   if (connecting) return connecting
