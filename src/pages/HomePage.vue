@@ -5,11 +5,10 @@ import PageShell from '@/components/PageShell.vue'
 import { statusClass, statusLabel, useChannels } from '@/composables/useChannels'
 import { channelMeta, flyers, groups, urgentHistory } from '@/data/mock'
 
-const upcoming = [
-  { title: 'Рабочее собрание Digital', when: '11 окт · 15:00', place: 'Антей' },
-  { title: 'Семинар по рассылке · Выбор', when: '28 ноя · 20:15', place: 'Выбор' },
-  { title: 'Юбилей «Выбор» 12 лет', when: '5 дек · 18:00', place: 'по анонсу' }
-]
+const upcoming = flyers
+  .filter(f => f.status !== 'sent')
+  .slice(0, 3)
+  .map(f => ({ title: f.title, when: f.date, place: f.place }))
 
 const flyerInWork = flyers.filter(f => f.status !== 'sent').length
 const { channels, onlineCount } = useChannels()

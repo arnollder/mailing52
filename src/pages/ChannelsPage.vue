@@ -1,13 +1,35 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { RefreshCw } from 'lucide-vue-next'
 import PageShell from '@/components/PageShell.vue'
+import { useApiKey } from '@/composables/useApiKey'
 import {
   statusClass,
   statusLabel,
   useChannels
 } from '@/composables/useChannels'
+import { useToast } from '@/composables/useToast'
 
 const { channels, loading, error, onlineCount, refresh } = useChannels()
+const { apiKey, hasKey, setApiKey, qrUrl } = useApiKey()
+const toast = useToast()
+const keyDraft = ref(apiKey.value)
+
+function saveKey() {
+  const next = keyDraft.value.trim()
+  setApiKey(next)
+  toast.add({
+    title: next ? 'API-ключ сохранён' : 'Ключ очищен',
+    description: 'Только в этом браузере (localStorage)',
+    tone: 'success'
+  })
+}
+
+function openQr(e: Event) {
+  if (hasKey.value) return
+  e.preventDefault()
+  toast.add({ title: 'Сначала сохрани API-ключ', tone: 'warning' })
+}
 </script>
 
 <template>
@@ -44,6 +66,33 @@ const { channels, loading, error, onlineCount, refresh } = useChannels()
           />
           Обновить
         </button>
+      </div>
+
+      <div class="desk-surface rounded-2xl p-4 sm:p-5">
+        <h2 class="font-display mb-1 text-sm font-semibold">
+          API-ключ оператора
+        </h2>
+        <p class="mb-3 text-xs text-[var(--desk-muted)]">
+          Значение `MAILING52_API_KEY` из `.env`. Нужен для срочных и QR WhatsApp.
+          {{ hasKey ? 'Ключ в этом браузере есть.' : 'Ключа ещё нет — срочное не уйдёт.' }}
+        </p>
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            v-model="keyDraft"
+            class="input flex-1 font-mono text-sm"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="вставь ключ"
+          >
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            @click="saveKey"
+          >
+            Сохранить
+          </button>
+        </div>
       </div>
 
       <div class="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -139,10 +188,12 @@ const { channels, loading, error, onlineCount, refresh } = useChannels()
 
           <a
             v-if="ch.id === 'whatsapp' && ch.status !== 'connected'"
-            href="/api/wa/qr"
+            :href="qrUrl()"
             target="_blank"
             rel="noopener noreferrer"
             class="btn btn-primary btn-sm btn-block"
+            :class="!hasKey ? 'opacity-50' : ''"
+            @click="openQr"
           >
             Открыть QR WhatsApp
           </a>

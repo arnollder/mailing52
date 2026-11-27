@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
-import { Award, BookOpen, Pencil, Send, Upload, Users, X } from 'lucide-vue-next'
+import { Award, BookOpen, Send, Upload, Users, X } from 'lucide-vue-next'
 import PageShell from '@/components/PageShell.vue'
 import { useToast } from '@/composables/useToast'
 import {
@@ -63,9 +63,9 @@ function publish() {
     return
   }
   toast.add({
-    title: 'Флаер в рассылку',
+    title: 'Пока мок — не уходит в каналы',
     description: form.title,
-    tone: 'success'
+    tone: 'info'
   })
   open.value = false
   files.value = null
@@ -116,7 +116,7 @@ function publish() {
               </div>
             </div>
             <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-3">
-              <span class="badge bg-black/40 text-[var(--desk-ink)]">
+              <span class="badge flyer-badge">
                 {{ statusLabel[flyer.status] }}
               </span>
             </div>
@@ -150,12 +150,6 @@ function publish() {
                 <Send class="size-3.5" />
                 В рассылку
               </button>
-              <button
-                type="button"
-                class="btn btn-ghost btn-sm"
-              >
-                <Pencil class="size-3.5" />
-              </button>
             </div>
           </div>
         </article>
@@ -164,7 +158,7 @@ function publish() {
 
     <div
       v-if="open"
-      class="fixed inset-0 z-50 flex justify-end bg-black/50"
+      class="desk-overlay fixed inset-0 z-50 flex justify-end"
       @click.self="open = false"
     >
       <aside class="flex h-full w-full max-w-md flex-col border-l border-[var(--desk-line)] bg-[var(--desk-surface)]">

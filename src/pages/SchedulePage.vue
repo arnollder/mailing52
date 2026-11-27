@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { Check, Pencil, Plus, X } from 'lucide-vue-next'
+import { Check, Plus, X } from 'lucide-vue-next'
 import PageShell from '@/components/PageShell.vue'
 import { useToast } from '@/composables/useToast'
 import { channelMeta, groups, type Channel } from '@/data/mock'
@@ -42,9 +42,9 @@ function saveGroup() {
     return
   }
   toast.add({
-    title: 'Собрание добавлено',
+    title: 'Пока мок — не сохраняется',
     description: `${form.group} · ${form.day} ${form.time}`,
-    tone: 'success'
+    tone: 'info'
   })
   open.value = false
   form.group = ''
@@ -147,14 +147,8 @@ function saveGroup() {
                   </span>
                 </div>
               </td>
-              <td class="px-3 py-2.5">
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-sm"
-                  aria-label="Редактировать"
-                >
-                  <Pencil class="size-3.5" />
-                </button>
+              <td class="px-3 py-2.5 text-[11px] text-[var(--desk-muted)]">
+                мок
               </td>
             </tr>
           </tbody>
@@ -164,7 +158,7 @@ function saveGroup() {
 
     <div
       v-if="open"
-      class="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
+      class="desk-overlay fixed inset-0 z-50 grid place-items-center p-4"
       @click.self="open = false"
     >
       <div class="desk-surface w-full max-w-lg rounded-2xl p-5">

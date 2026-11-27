@@ -20,7 +20,6 @@ export interface LiveChannel {
     session: string
     open: boolean
     qr: boolean
-    authDir: string
     size: number | null
   }
 }
@@ -28,7 +27,6 @@ export interface LiveChannel {
 const channels: Ref<LiveChannel[]> = ref([])
 const loading = ref(false)
 const error = ref<string | null>(null)
-const loadedOnce = ref(false)
 
 let inflight: Promise<void> | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -50,7 +48,6 @@ async function fetchChannels() {
       }
       channels.value = data.channels
       error.value = null
-      loadedOnce.value = true
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'не удалось загрузить каналы'
     } finally {
@@ -96,7 +93,6 @@ export function useChannels() {
     channels,
     loading,
     error,
-    loadedOnce,
     onlineCount,
     refresh: fetchChannels
   }

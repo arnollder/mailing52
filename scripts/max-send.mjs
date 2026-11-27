@@ -3,21 +3,8 @@
  * Отправка в канал MAX из .env
  * Usage: node scripts/max-send.mjs "текст"
  */
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-
-function loadEnv(path) {
-  try {
-    const raw = readFileSync(path, 'utf8')
-    for (const line of raw.split('\n')) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
-      if (!m) continue
-      if (process.env[m[1]] === undefined) process.env[m[1]] = m[2]
-    }
-  } catch {
-    /* no file */
-  }
-}
+import { loadEnv } from '../server/load-env.mjs'
 
 loadEnv(resolve(process.cwd(), '.env'))
 
@@ -41,11 +28,8 @@ const res = await fetch(url, {
     Authorization: token,
     'Content-Type': 'application/json'
   },
-  // сертификат Минцифры на некоторых машинах ещё не в trust store
-  // Node 18+ fetch не умеет rejectUnauthorized:false — при SSL-ошибке ставь NODE_TLS_REJECT_UNAUTHORIZED=0
   body: JSON.stringify({ text })
 })
-
 const body = await res.text()
 if (!res.ok) {
   console.error(res.status, body)

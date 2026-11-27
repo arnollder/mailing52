@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { inject } from 'vue'
 import { Menu } from 'lucide-vue-next'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 
 defineProps<{
   title: string
@@ -25,6 +26,7 @@ const openSidebar = inject<() => void>('openSidebar', () => {})
         {{ title }}
       </h1>
       <div class="ms-auto flex shrink-0 items-center gap-2">
+        <ThemeToggle />
         <slot name="actions" />
       </div>
     </header>

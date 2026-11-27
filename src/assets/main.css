@@ -8,15 +8,19 @@
   --color-moss-300: #86efac;
   --color-moss-400: #4ade80;
   --color-moss-500: #22c55e;
+  --color-moss-600: #16a34a;
+  --color-moss-700: #15803d;
 
   --color-ember-200: #fed7aa;
   --color-ember-400: #fb923c;
   --color-ember-500: #f97316;
+  --color-ember-700: #c2410c;
 
   --color-warning: #fbbf24;
 }
 
-:root {
+:root,
+[data-theme="dark"] {
   --desk-bg: #070907;
   --desk-elevated: #0e120f;
   --desk-surface: #121816;
@@ -26,7 +30,48 @@
   --desk-line: #243029;
   --desk-glow: rgba(34, 197, 94, 0.12);
   --desk-glow-strong: rgba(74, 222, 128, 0.18);
+  --desk-glow-secondary: rgba(22, 163, 74, 0.08);
+  --desk-hover: color-mix(in oklab, white 5%, transparent);
+  --desk-badge-bg: color-mix(in oklab, white 5%, transparent);
+  --desk-overlay: rgba(0, 0, 0, 0.5);
+  --desk-inset: rgba(255, 255, 255, 0.02);
+  --btn-primary-fg: var(--color-moss-300);
+  --btn-primary-bg: color-mix(in oklab, var(--color-moss-500) 22%, transparent);
+  --btn-primary-border: color-mix(in oklab, var(--color-moss-400) 35%, transparent);
+  --btn-primary-bg-hover: color-mix(in oklab, var(--color-moss-500) 32%, transparent);
+  --btn-danger-fg: #fdba74;
+  --btn-danger-bg: color-mix(in oklab, var(--color-ember-500) 18%, transparent);
+  --btn-danger-border: color-mix(in oklab, var(--color-ember-400) 35%, transparent);
+  --btn-danger-bg-hover: color-mix(in oklab, var(--color-ember-500) 28%, transparent);
+  --nav-active-fg: var(--color-moss-300);
   color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --desk-bg: #f4f7f4;
+  --desk-elevated: #ffffff;
+  --desk-surface: #ffffff;
+  --desk-surface-2: #eef3ef;
+  --desk-ink: #142018;
+  --desk-muted: #5a6b5e;
+  --desk-line: #d5e0d7;
+  --desk-glow: rgba(22, 163, 74, 0.1);
+  --desk-glow-strong: rgba(22, 163, 74, 0.16);
+  --desk-glow-secondary: rgba(21, 128, 61, 0.06);
+  --desk-hover: color-mix(in oklab, black 4%, transparent);
+  --desk-badge-bg: color-mix(in oklab, black 4%, transparent);
+  --desk-overlay: rgba(15, 25, 18, 0.4);
+  --desk-inset: rgba(0, 0, 0, 0.02);
+  --btn-primary-fg: var(--color-moss-700);
+  --btn-primary-bg: color-mix(in oklab, var(--color-moss-500) 14%, white);
+  --btn-primary-border: color-mix(in oklab, var(--color-moss-600) 35%, transparent);
+  --btn-primary-bg-hover: color-mix(in oklab, var(--color-moss-500) 22%, white);
+  --btn-danger-fg: var(--color-ember-700);
+  --btn-danger-bg: color-mix(in oklab, var(--color-ember-500) 12%, white);
+  --btn-danger-border: color-mix(in oklab, var(--color-ember-500) 35%, transparent);
+  --btn-danger-bg-hover: color-mix(in oklab, var(--color-ember-500) 20%, white);
+  --nav-active-fg: var(--color-moss-700);
+  color-scheme: light;
 }
 
 html,
@@ -45,7 +90,7 @@ body,
 .desk-shell {
   background:
     radial-gradient(ellipse 80% 50% at 0% 0%, var(--desk-glow) 0%, transparent 55%),
-    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(22, 163, 74, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, var(--desk-glow-secondary) 0%, transparent 50%),
     var(--desk-bg);
 }
 
@@ -53,7 +98,7 @@ body,
   background: var(--desk-surface);
   border: 1px solid var(--desk-line);
   border-radius: 1rem;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+  box-shadow: 0 0 0 1px var(--desk-inset) inset;
 }
 
 .desk-surface-soft {
@@ -100,13 +145,13 @@ body,
 }
 
 .btn-primary {
-  background: color-mix(in oklab, var(--color-moss-500) 22%, transparent);
-  color: var(--color-moss-300);
-  border-color: color-mix(in oklab, var(--color-moss-400) 35%, transparent);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+  border-color: var(--btn-primary-border);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--color-moss-500) 32%, transparent);
+  background: var(--btn-primary-bg-hover);
 }
 
 .btn-ghost {
@@ -115,7 +160,7 @@ body,
 }
 
 .btn-ghost:hover:not(:disabled) {
-  background: color-mix(in oklab, white 4%, transparent);
+  background: var(--desk-hover);
   color: var(--desk-ink);
 }
 
@@ -126,17 +171,17 @@ body,
 }
 
 .btn-outline:hover:not(:disabled) {
-  border-color: color-mix(in oklab, var(--color-moss-400) 40%, transparent);
+  border-color: color-mix(in oklab, var(--color-moss-500) 45%, transparent);
 }
 
 .btn-danger {
-  background: color-mix(in oklab, var(--color-ember-500) 18%, transparent);
-  color: #fdba74;
-  border-color: color-mix(in oklab, var(--color-ember-400) 35%, transparent);
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-fg);
+  border-color: var(--btn-danger-border);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--color-ember-500) 28%, transparent);
+  background: var(--btn-danger-bg-hover);
 }
 
 .btn-sm {
@@ -175,7 +220,7 @@ body,
 .input:focus,
 .select:focus,
 .textarea:focus {
-  border-color: color-mix(in oklab, var(--color-moss-400) 45%, transparent);
+  border-color: color-mix(in oklab, var(--color-moss-500) 45%, transparent);
 }
 
 .badge {
@@ -185,9 +230,53 @@ body,
   border-radius: 0.5rem;
   padding: 0.15rem 0.45rem;
   font-size: 0.6875rem;
-  background: color-mix(in oklab, white 5%, transparent);
+  background: var(--desk-badge-bg);
   color: var(--desk-muted);
   border: 1px solid var(--desk-line);
+}
+
+.theme-toggle {
+  position: relative;
+  display: inline-flex;
+  width: 2.75rem;
+  height: 1.55rem;
+  flex-shrink: 0;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--desk-line);
+  background: var(--desk-elevated);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-moss-500) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.theme-toggle-knob {
+  position: absolute;
+  top: 2px;
+  display: grid;
+  width: 1.2rem;
+  height: 1.2rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--desk-surface-2);
+  color: var(--desk-ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: left 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.theme-toggle-knob-dark {
+  left: 2px;
+  color: var(--color-moss-300);
+}
+
+.theme-toggle-knob-light {
+  left: calc(100% - 1.2rem - 2px);
+  color: var(--color-moss-600);
 }
 
 .flyer-card {
@@ -195,7 +284,7 @@ body,
 }
 
 .flyer-card:hover {
-  border-color: rgba(74, 222, 128, 0.35);
+  border-color: color-mix(in oklab, var(--color-moss-500) 40%, transparent);
   box-shadow: 0 8px 28px -12px var(--desk-glow-strong);
 }
 
@@ -219,14 +308,36 @@ body,
   background: linear-gradient(165deg, #15803d 0%, #14532d 45%, #0a0f0c 100%);
 }
 
+.flyer-badge {
+  background: color-mix(in oklab, black 45%, transparent);
+  color: #e8f0ea;
+  border-color: transparent;
+}
+
 .channel-dot-online {
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+}
+
+.desk-overlay {
+  background: var(--desk-overlay);
+}
+
+.nav-link-idle:hover {
+  background: var(--desk-hover);
+  color: var(--desk-ink);
+}
+
+.nav-link-active {
+  background: color-mix(in oklab, var(--color-moss-500) 15%, transparent);
+  color: var(--nav-active-fg);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-moss-500) 25%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .desk-page-enter,
   .flyer-card,
-  .flyer-card .flyer-preview {
+  .flyer-card .flyer-preview,
+  .theme-toggle-knob {
     animation: none !important;
     transition: none !important;
   }

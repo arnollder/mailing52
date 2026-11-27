@@ -3,35 +3,17 @@
  * Минимальный API рассылки. Токены только из env / .env
  * POST /api/urgent  { text, channels: ["max", "whatsapp", ...] }
  * GET  /api/health
+ * Защищено MAILING52_API_KEY: urgent, wa/qr, wa/status
  */
 import { createServer } from 'node:http'
-import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import QRCode from 'qrcode'
+import { loadEnv } from './load-env.mjs'
 import { ensureWa, getWaGroupInfo, getWaQr, getWaStatus, sendWaText } from './wa.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
-
-function loadEnv(path) {
-  try {
-    for (const line of readFileSync(path, 'utf8').split('\n')) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
-      if (!m) continue
-      let val = m[2]
-      // "foo bar" / 'foo' — иначе кириллица в title ломает shell source, а тут кавычки лишние
-      if (
-        (val.startsWith('"') && val.endsWith('"'))
-        || (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1)
-      }
-      if (process.env[m[1]] === undefined) process.env[m[1]] = val
-    }
-  } catch {
-    /* optional */
-  }
-}
 
 loadEnv(resolve(ROOT, '.env'))
 
@@ -64,6 +46,32 @@ function readBody(req) {
     req.on('end', () => resolveBody(Buffer.concat(chunks).toString('utf8')))
     req.on('error', reject)
   })
+}
+
+/** X-Api-Key / Bearer / ?key= */
+function extractApiKey(req, url) {
+  const header = req.headers['x-api-key']
+  if (typeof header === 'string' && header) return header
+  const auth = req.headers.authorization
+  if (typeof auth === 'string' && auth.startsWith('Bearer ')) return auth.slice(7)
+  const q = url.searchParams.get('key')
+  return q || ''
+}
+
+function requireApiKey(req, res, url) {
+  const expected = process.env.MAILING52_API_KEY || ''
+  if (!expected) {
+    if (process.env.NODE_ENV === 'production') {
+      json(res, 503, { ok: false, error: 'MAILING52_API_KEY не задан на сервере' })
+      return false
+    }
+    return true
+  }
+  if (extractApiKey(req, url) !== expected) {
+    json(res, 401, { ok: false, error: 'нужен API-ключ (X-Api-Key)' })
+    return false
+  }
+  return true
 }
 
 async function sendMax(text) {
@@ -133,6 +141,8 @@ async function sendTelegram(text) {
   }
 }
 
+const ALLOWED_CHANNELS = new Set(['telegram', 'max', 'whatsapp'])
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
 
@@ -142,6 +152,7 @@ const server = createServer(async (req, res) => {
       ok: true,
       max: Boolean(process.env.MAX_BOT_TOKEN && process.env.MAX_CHAT_ID),
       telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+      apiKey: Boolean(process.env.MAILING52_API_KEY),
       whatsapp: {
         configured: wa.hasGroupJid,
         status: wa.status,
@@ -151,7 +162,7 @@ const server = createServer(async (req, res) => {
     })
   }
 
-  // Публичные статусы каналов (без токенов) — для UI «Каналы»
+  // Публичные статусы каналов (без токенов и без путей auth)
   if (req.method === 'GET' && url.pathname === '/api/channels') {
     try {
       const wa = getWaStatus()
@@ -172,7 +183,7 @@ const server = createServer(async (req, res) => {
       let waStatus = 'offline'
       if (wa.open) waStatus = 'connected'
       else if (wa.status === 'qr' || wa.status === 'connecting') waStatus = 'pending'
-      else if (wa.hasGroupJid) waStatus = 'pending' // JID есть, сессия не open на этом процессе
+      else if (wa.hasGroupJid) waStatus = 'pending'
 
       return json(res, 200, {
         ok: true,
@@ -230,7 +241,7 @@ const server = createServer(async (req, res) => {
             hint: wa.open
               ? `Baileys · сессия open${waGroup?.size != null ? ` · ${waGroup.size} уч.` : ''}`
               : wa.status === 'qr'
-                ? 'Ждёт скана QR (/api/wa/qr)'
+                ? 'Ждёт скана QR (нужен API-ключ)'
                 : 'Baileys · WA_GROUP_JID + сессия .wa-auth',
             detail: wa.lastError || (wa.status !== 'open' ? `baileys:${wa.status}` : null),
             needs: [
@@ -242,8 +253,7 @@ const server = createServer(async (req, res) => {
             wa: {
               session: wa.status,
               open: wa.open,
-              qr: wa.lastQr,
-              authDir: wa.authDir,
+              qr: Boolean(wa.lastQr),
               size: waGroup?.size ?? null
             }
           }
@@ -258,17 +268,19 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/wa/status') {
-    return json(res, 200, { ok: true, ...getWaStatus() })
+    if (!requireApiKey(req, res, url)) return
+    const { authDir: _authDir, ...safe } = getWaStatus()
+    return json(res, 200, { ok: true, ...safe })
   }
 
-  // QR в браузере — удобнее, чем ловить ASCII в терминале агента
+  // QR локально (png data-URL), без сторонних сервисов. Нужен API-ключ.
   if (req.method === 'GET' && url.pathname === '/api/wa/qr') {
+    if (!requireApiKey(req, res, url)) return
     const qr = getWaQr()
     const st = getWaStatus()
     if (st.open) {
       const html = `<!doctype html><meta charset="utf-8"><title>WA</title>
-        <body style="font:16px system-ui;padding:2rem"><p>WhatsApp уже подключён.</p>
-        <p><a href="/api/wa/status">status</a></p></body>`
+        <body style="font:16px system-ui;padding:2rem"><p>WhatsApp уже подключён.</p></body>`
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
       return res.end(html)
     }
@@ -279,7 +291,11 @@ const server = createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
       return res.end(html)
     }
-    const img = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(qr)}`
+    const img = await QRCode.toDataURL(qr, {
+      width: 320,
+      margin: 2,
+      errorCorrectionLevel: 'M'
+    })
     const html = `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="15">
       <title>WhatsApp QR</title>
       <body style="font:16px system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#111;color:#eee">
@@ -294,11 +310,14 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/urgent') {
+    if (!requireApiKey(req, res, url)) return
     try {
       const raw = await readBody(req)
       const body = raw ? JSON.parse(raw) : {}
       const text = typeof body.text === 'string' ? body.text.trim() : ''
-      const channels = Array.isArray(body.channels) ? body.channels : []
+      const channels = Array.isArray(body.channels)
+        ? body.channels.filter(c => ALLOWED_CHANNELS.has(c))
+        : []
 
       if (text.length < 5) {
         return json(res, 400, { ok: false, error: 'Текст слишком короткий' })
@@ -342,9 +361,11 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`mailing52-api http://${HOST}:${PORT}`)
-  // WA_SKIP_CONNECT=1 — не трогать сессию (удобно локально, пока прод держит Baileys)
-  if (process.env.WA_SKIP_CONNECT === '1') {
-    console.log('[wa] bootstrap skipped (WA_SKIP_CONNECT=1)')
+  if (!process.env.MAILING52_API_KEY && process.env.NODE_ENV === 'production') {
+    console.warn('[api] MAILING52_API_KEY пуст — urgent/QR закрыты (503)')
+  }
+  if (process.env.WA_SKIP_CONNECT === '1' || (process.env.WA_SKIP_CONNECT !== '0' && process.env.WA_ALLOW_CONNECT !== '1' && process.env.NODE_ENV !== 'production' && process.env.WA_PROFILE !== 'prod')) {
+    console.log('[wa] bootstrap skipped (local profile / WA_SKIP_CONNECT)')
     return
   }
   ensureWa().catch((err) => {

@@ -24,6 +24,7 @@ logs
 .env.*
 !.env.example
 
-# WhatsApp Baileys session (не в репо)
+# WhatsApp Baileys sessions (не в репо)
 .wa-auth/
+.wa-auth-local/
 auth_info_baileys/

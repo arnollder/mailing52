@@ -4,9 +4,9 @@ import { useToast } from '@/composables/useToast'
 const { items, remove } = useToast()
 
 const toneClass: Record<string, string> = {
-  success: 'border-moss-500/40 bg-moss-500/15 text-moss-200',
-  warning: 'border-amber-400/40 bg-amber-500/15 text-amber-100',
-  error: 'border-ember-500/40 bg-ember-500/15 text-ember-200',
+  success: 'border-moss-500/40 bg-moss-500/15 text-[var(--desk-ink)]',
+  warning: 'border-warning/40 bg-warning/15 text-[var(--desk-ink)]',
+  error: 'border-ember-500/40 bg-ember-500/15 text-[var(--desk-ink)]',
   info: 'border-moss-400/30 bg-[var(--desk-surface)] text-[var(--desk-ink)]',
   neutral: 'border-[var(--desk-line)] bg-[var(--desk-surface)] text-[var(--desk-ink)]'
 }

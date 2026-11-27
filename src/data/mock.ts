@@ -1,6 +1,5 @@
 export type Channel = 'telegram' | 'max' | 'whatsapp'
 export type EventType = 'meeting' | 'seminar' | 'anniversary' | 'other'
-export type ChannelStatus = 'connected' | 'pending' | 'offline'
 
 export interface GroupMeeting {
   id: string
@@ -32,16 +31,6 @@ export interface UrgentMessage {
   status: 'sent' | 'failed' | 'queued'
   delivered: number
   total: number
-}
-
-export interface MessengerChannel {
-  id: Channel
-  name: string
-  short: string
-  status: ChannelStatus
-  chatTitle: string
-  chatId: string
-  hint: string
 }
 
 export const groups: GroupMeeting[] = [
@@ -158,36 +147,6 @@ export const urgentHistory: UrgentMessage[] = [
     status: 'sent',
     delivered: 2,
     total: 2
-  }
-]
-
-export const messengers: MessengerChannel[] = [
-  {
-    id: 'telegram',
-    name: 'Telegram',
-    short: 'TG',
-    status: 'connected',
-    chatTitle: 'Рассылка Анонимные Наркоманы М52',
-    chatId: '-1005955640875',
-    hint: 'Канал @mailing_m52 · бот @ArnolderBot'
-  },
-  {
-    id: 'max',
-    name: 'MAX',
-    short: 'MX',
-    status: 'connected',
-    chatTitle: 'Рассылка Анонимные Наркоманы М52',
-    chatId: '-81705608563217',
-    hint: 'Канал @se15171561_biz · бот @se15171561_bot'
-  },
-  {
-    id: 'whatsapp',
-    name: 'WhatsApp',
-    short: 'WA',
-    status: 'offline',
-    chatTitle: 'Digital М52 · рассылка',
-    chatId: '',
-    hint: 'Один чат местности · Baileys (локально)'
   }
 ]
 

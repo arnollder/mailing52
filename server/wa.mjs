@@ -1,9 +1,9 @@
 /**
  * WhatsApp через Baileys.
- * Сессия: .wa-auth/  ·  группа: WA_GROUP_JID в .env
+ * Прод: .wa-auth + WA_PROFILE=prod (или NODE_ENV=production)
+ * Local/dev: .wa-auth-local, по умолчанию без коннекта (не глушим прод)
  *
  * Без getMessage / receipt-confirm WA часто врёт «отправил», а в чате пусто.
- * На проде — один инстанс. Локально: WA_SKIP_CONNECT=1.
  */
 import { mkdirSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
@@ -28,16 +28,34 @@ const MSG_STORE_MAX = 200
 const ACK_WAIT_MS = 20_000
 const GROUP_META_TTL_MS = 60_000
 
-function authDir() {
-  return resolve(ROOT, process.env.WA_AUTH_DIR || '.wa-auth')
+export function isWaProduction() {
+  if (process.env.WA_PROFILE === 'prod') return true
+  if (process.env.WA_PROFILE === 'local') return false
+  return process.env.NODE_ENV === 'production'
+}
+
+export function authDir() {
+  if (process.env.WA_AUTH_DIR) {
+    return resolve(ROOT, process.env.WA_AUTH_DIR)
+  }
+  return resolve(ROOT, isWaProduction() ? '.wa-auth' : '.wa-auth-local')
 }
 
 function waLogger() {
   return pino({ level: process.env.WA_LOG_LEVEL || 'silent' })
 }
 
-function skipConnect() {
-  return process.env.WA_SKIP_CONNECT === '1'
+/** Вне прода по умолчанию skip; явно: WA_SKIP_CONNECT=0 или WA_ALLOW_CONNECT=1 */
+export function skipConnect() {
+  if (process.env.WA_SKIP_CONNECT === '1') return true
+  if (process.env.WA_SKIP_CONNECT === '0') return false
+  if (process.env.WA_ALLOW_CONNECT === '1') return false
+  return !isWaProduction()
+}
+
+function deviceName() {
+  return process.env.WA_DEVICE_NAME
+    || (isWaProduction() ? 'mailing52' : 'mailing52-local')
 }
 
 /** @type {ReturnType<typeof makeWASocket> | null} */
@@ -77,9 +95,11 @@ export function getWaStatus() {
   return {
     status,
     open: status === 'open',
+    profile: isWaProduction() ? 'prod' : 'local',
     hasGroupJid: Boolean(process.env.WA_GROUP_JID),
     groupJid: process.env.WA_GROUP_JID || null,
     authDir: authDir(),
+    deviceName: deviceName(),
     lastQr: Boolean(lastQr),
     lastError,
     skipConnect: skipConnect()
@@ -130,7 +150,7 @@ export async function getWaGroupInfo(jid = process.env.WA_GROUP_JID) {
 
 export async function ensureWa() {
   if (skipConnect()) {
-    throw new Error('WA_SKIP_CONNECT=1 — локально не трогаем сессию (прод держит Baileys)')
+    throw new Error('WA skip: локальный профиль не коннектится к WA (прод живёт отдельно). Для логина: pnpm wa:login')
   }
   // sock уже есть на qr/connecting/open — второй makeWASocket убивает сессию
   if (sock && status !== 'close' && status !== 'idle') return sock
@@ -158,7 +178,7 @@ async function startWa() {
       keys: makeCacheableSignalKeyStore(state.keys, logger)
     },
     logger,
-    browser: Browsers.ubuntu('mailing52'),
+    browser: Browsers.ubuntu(deviceName()),
     printQRInTerminal: false,
     syncFullHistory: false,
     markOnlineOnConnect: false,
@@ -216,7 +236,7 @@ async function startWa() {
       lastError = lastDisconnect?.error instanceof Error
         ? lastDisconnect.error.message
         : `close:${code ?? 'unknown'}`
-      console.warn('[wa] closed', lastError, loggedOut ? '(logged out — удали .wa-auth и снова QR)' : '')
+      console.warn('[wa] closed', lastError, loggedOut ? `(logged out — удали ${authDir()} и снова QR)` : '')
 
       sock = null
       if (!loggedOut && !skipConnect()) {
@@ -362,7 +382,7 @@ function armSendConfirm(s, timeoutMs = ACK_WAIT_MS) {
 
 export async function sendWaText(text, jid = process.env.WA_GROUP_JID) {
   if (skipConnect()) {
-    return { ok: false, error: 'WA_SKIP_CONNECT=1 — шлём только с прода' }
+    return { ok: false, error: 'WA skip — локально не шлём; прод держит свою сессию' }
   }
   if (!jid) {
     return { ok: false, error: 'WA_GROUP_JID не задан в .env' }

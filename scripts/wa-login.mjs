@@ -1,35 +1,40 @@
 #!/usr/bin/env node
 /**
- * Локальный логин WhatsApp (Baileys): QR в терминале → список групп.
+ * Третья (локальная) сессия WhatsApp через QR.
+ * Пишет ТОЛЬКО в .wa-auth-local — прод (.wa-auth на сервере) не трогает.
+ *
  * Usage: pnpm wa:login
  */
-import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadEnv } from '../server/load-env.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-function loadEnv(path) {
-  try {
-    for (const line of readFileSync(path, 'utf8').split('\n')) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
-      if (!m) continue
-      if (process.env[m[1]] === undefined) process.env[m[1]] = m[2]
-    }
-  } catch { /* optional */ }
-}
-
 loadEnv(resolve(ROOT, '.env'))
 
-if (process.env.WA_SKIP_CONNECT === '1') {
-  console.error('[wa:login] WA_SKIP_CONNECT=1 — для логина временно убери из .env (и не делай это, пока прод онлайн на тех же ключах)')
+process.env.WA_PROFILE = 'local'
+process.env.WA_AUTH_DIR = process.env.WA_AUTH_DIR_LOCAL || '.wa-auth-local'
+process.env.WA_DEVICE_NAME = process.env.WA_DEVICE_NAME || 'mailing52-dev'
+process.env.WA_ALLOW_CONNECT = '1'
+process.env.WA_SKIP_CONNECT = '0'
+process.env.WA_QR_TERMINAL = process.env.WA_QR_TERMINAL || '1'
+
+const authAbs = resolve(ROOT, process.env.WA_AUTH_DIR)
+if (authAbs.includes('/opt/mailing52') || process.env.WA_AUTH_DIR === '.wa-auth') {
+  console.error('[wa:login] отказ: нельзя логиниться в продовый auth dir')
+  console.error('  сейчас:', authAbs)
+  console.error('  для этого ПК используй .wa-auth-local (дефолт)')
   process.exit(1)
 }
 
-const { ensureWa, listGroups, waitUntilOpen, getWaStatus } = await import('../server/wa.mjs')
+const { ensureWa, listGroups, waitUntilOpen, getWaStatus, authDir } = await import('../server/wa.mjs')
 
-console.log('[wa:login] auth →', process.env.WA_AUTH_DIR || '.wa-auth')
-console.warn('[wa:login] не гоняй на продовых .wa-auth, пока mailing52-api держит сессию')
+console.log('[wa:login] профиль local · device', process.env.WA_DEVICE_NAME)
+console.log('[wa:login] auth →', authDir())
+console.log('[wa:login] WhatsApp → Связанные устройства → Привязать устройство')
+console.log('[wa:login] прод на сервере не задеваем (другой QR / другой каталог)\n')
+
 await ensureWa()
 await waitUntilOpen(180_000)
 console.log('[wa:login]', getWaStatus())

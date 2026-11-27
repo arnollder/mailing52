@@ -39,22 +39,34 @@ rsync -az --delete \
 
 if [[ -f .env ]]; then
   echo "==> Sync .env (secrets)"
-  # WA_SKIP_CONNECT=1 локально обязателен; на прод его тащить нельзя — Baileys не поднимется
+  # Локальные флаги/пути не тащим на прод — иначе Baileys не поднимется или возьмёт не тот auth
   tmp_env="$(mktemp)"
-  grep -vE '^WA_SKIP_CONNECT=' ./.env > "$tmp_env" || true
+  grep -vE '^(WA_SKIP_CONNECT|WA_ALLOW_CONNECT|WA_PROFILE|WA_AUTH_DIR|WA_AUTH_DIR_LOCAL|WA_DEVICE_NAME)=' ./.env > "$tmp_env" || true
+  {
+    echo "WA_PROFILE=prod"
+    echo "WA_AUTH_DIR=.wa-auth"
+  } >> "$tmp_env"
   rsync -az -e "ssh ${SSH_OPTS[*]}" "$tmp_env" "$HOST:$REMOTE_APP/.env"
   rm -f "$tmp_env"
   ssh "${SSH_OPTS[@]}" "$HOST" "chmod 600 $REMOTE_APP/.env && chown mailing52:mailing52 $REMOTE_APP/.env 2>/dev/null || chown root:root $REMOTE_APP/.env"
 fi
 
-# Сессия WhatsApp живёт ТОЛЬКО на проде. Локальный .wa-auth — другой device; заливка убивает прод.
-# Явно: SYNC_WA_AUTH=1 bash deploy/deploy.sh
-if [[ "${SYNC_WA_AUTH:-}" == "1" && -d .wa-auth ]]; then
-  echo "==> Sync .wa-auth (WhatsApp session) — SYNC_WA_AUTH=1"
+# Прод-сессия неприкосновенна. Локальный .wa-auth-local / чужой QR сюда не лей.
+# Аварийно: SYNC_WA_AUTH=1 I_KNOW_WA_AUTH_OVERWRITE=1 bash deploy/deploy.sh
+if [[ "${SYNC_WA_AUTH:-}" == "1" ]]; then
+  if [[ "${I_KNOW_WA_AUTH_OVERWRITE:-}" != "1" ]]; then
+    echo "ERROR: SYNC_WA_AUTH=1 без I_KNOW_WA_AUTH_OVERWRITE=1 — отказ (убило бы прод-сессию)"
+    exit 1
+  fi
+  if [[ ! -d .wa-auth ]]; then
+    echo "ERROR: нет ./.wa-auth для заливки"
+    exit 1
+  fi
+  echo "==> Sync .wa-auth → прод (ОПАСНО, ты подтвердил I_KNOW_WA_AUTH_OVERWRITE=1)"
   rsync -az --delete -e "ssh ${SSH_OPTS[*]}" ./.wa-auth/ "$HOST:$REMOTE_APP/.wa-auth/"
   ssh "${SSH_OPTS[@]}" "$HOST" "chown -R mailing52:mailing52 $REMOTE_APP/.wa-auth && chmod -R u+rwX,go-rwx $REMOTE_APP/.wa-auth"
 else
-  echo "==> Skip .wa-auth (прод-сессия неприкосновенна; SYNC_WA_AUTH=1 чтобы залить)"
+  echo "==> Skip .wa-auth / .wa-auth-local (прод-сессия неприкосновенна)"
 fi
 
 echo "==> Remote activate"

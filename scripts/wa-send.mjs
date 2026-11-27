@@ -1,25 +1,21 @@
 #!/usr/bin/env node
 /**
- * Тест отправки в группу WhatsApp.
+ * Тест отправки с ЛОКАЛЬНОЙ сессии (.wa-auth-local).
  * Usage: pnpm wa:send "текст" [jid]
  */
-import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadEnv } from '../server/load-env.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-function loadEnv(path) {
-  try {
-    for (const line of readFileSync(path, 'utf8').split('\n')) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
-      if (!m) continue
-      if (process.env[m[1]] === undefined) process.env[m[1]] = m[2]
-    }
-  } catch { /* optional */ }
-}
-
 loadEnv(resolve(ROOT, '.env'))
+
+process.env.WA_PROFILE = 'local'
+process.env.WA_AUTH_DIR = process.env.WA_AUTH_DIR_LOCAL || process.env.WA_AUTH_DIR || '.wa-auth-local'
+process.env.WA_DEVICE_NAME = process.env.WA_DEVICE_NAME || 'mailing52-dev'
+process.env.WA_ALLOW_CONNECT = '1'
+process.env.WA_SKIP_CONNECT = '0'
 
 const text = process.argv[2] || `mailing52 baileys test ${new Date().toISOString()}`
 const jid = process.argv[3] || process.env.WA_GROUP_JID

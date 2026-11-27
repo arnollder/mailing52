@@ -43,7 +43,7 @@ function close() {
   <div class="desk-shell flex min-h-svh min-w-0 overflow-x-hidden text-[var(--desk-ink)]">
     <div
       v-if="open"
-      class="fixed inset-0 z-30 bg-black/50 lg:hidden"
+      class="desk-overlay fixed inset-0 z-30 lg:hidden"
       @click="close"
     />
 
@@ -82,8 +82,8 @@ function close() {
           :to="item.to"
           class="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors"
           :class="isActive(item.to)
-            ? 'bg-moss-500/15 text-moss-300 ring-1 ring-moss-400/25'
-            : 'text-[var(--desk-muted)] hover:bg-white/5 hover:text-[var(--desk-ink)]'"
+            ? 'nav-link-active'
+            : 'nav-link-idle text-[var(--desk-muted)]'"
           @click="close"
         >
           <component

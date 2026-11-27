@@ -12,6 +12,8 @@ Environment=HOST=127.0.0.1
 Environment=PORT=3012
 Environment=NODE_TLS_REJECT_UNAUTHORIZED=0
 Environment=NODE_ENV=production
+Environment=WA_PROFILE=prod
+Environment=WA_AUTH_DIR=.wa-auth
 ExecStart=/usr/bin/node /opt/mailing52/server/index.mjs
 Restart=on-failure
 RestartSec=3
