@@ -39,15 +39,22 @@ rsync -az --delete \
 
 if [[ -f .env ]]; then
   echo "==> Sync .env (secrets)"
-  rsync -az -e "ssh ${SSH_OPTS[*]}" ./.env "$HOST:$REMOTE_APP/.env"
+  # WA_SKIP_CONNECT=1 локально обязателен; на прод его тащить нельзя — Baileys не поднимется
+  tmp_env="$(mktemp)"
+  grep -vE '^WA_SKIP_CONNECT=' ./.env > "$tmp_env" || true
+  rsync -az -e "ssh ${SSH_OPTS[*]}" "$tmp_env" "$HOST:$REMOTE_APP/.env"
+  rm -f "$tmp_env"
   ssh "${SSH_OPTS[@]}" "$HOST" "chmod 600 $REMOTE_APP/.env && chown mailing52:mailing52 $REMOTE_APP/.env 2>/dev/null || chown root:root $REMOTE_APP/.env"
 fi
 
-# Сессия WhatsApp (Baileys) — только одна живая копия. Локальный API перед деплоем лучше стопнуть.
-if [[ -d .wa-auth ]]; then
-  echo "==> Sync .wa-auth (WhatsApp session)"
+# Сессия WhatsApp живёт ТОЛЬКО на проде. Локальный .wa-auth — другой device; заливка убивает прод.
+# Явно: SYNC_WA_AUTH=1 bash deploy/deploy.sh
+if [[ "${SYNC_WA_AUTH:-}" == "1" && -d .wa-auth ]]; then
+  echo "==> Sync .wa-auth (WhatsApp session) — SYNC_WA_AUTH=1"
   rsync -az --delete -e "ssh ${SSH_OPTS[*]}" ./.wa-auth/ "$HOST:$REMOTE_APP/.wa-auth/"
   ssh "${SSH_OPTS[@]}" "$HOST" "chown -R mailing52:mailing52 $REMOTE_APP/.wa-auth && chmod -R u+rwX,go-rwx $REMOTE_APP/.wa-auth"
+else
+  echo "==> Skip .wa-auth (прод-сессия неприкосновенна; SYNC_WA_AUTH=1 чтобы залить)"
 fi
 
 echo "==> Remote activate"
