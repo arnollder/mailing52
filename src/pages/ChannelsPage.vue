@@ -12,7 +12,7 @@ const { channels, loading, error, onlineCount, refresh } = useChannels()
 
 <template>
   <PageShell title="Каналы">
-    <div class="desk-page-enter mx-auto flex max-w-5xl flex-col gap-6 p-4 sm:p-6">
+    <div class="desk-page-enter mx-auto flex w-full min-w-0 max-w-5xl flex-col gap-6 p-4 sm:p-6">
       <div class="desk-surface-soft flex flex-wrap items-start justify-between gap-3 rounded-2xl px-5 py-4">
         <div>
           <p class="text-sm font-medium">
@@ -46,18 +46,18 @@ const { channels, loading, error, onlineCount, refresh } = useChannels()
         </button>
       </div>
 
-      <div class="grid gap-3 lg:grid-cols-3">
+      <div class="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <article
           v-for="ch in channels"
           :key="ch.id"
-          class="desk-surface flex flex-col gap-3 rounded-2xl p-4"
+          class="desk-surface flex min-w-0 max-w-full flex-col gap-3 overflow-hidden rounded-2xl p-4"
         >
-          <div class="flex items-start gap-2.5">
-            <span class="grid size-9 place-items-center rounded-xl bg-moss-500/12 text-xs font-bold text-moss-400 ring-1 ring-moss-400/25">
+          <div class="flex min-w-0 items-start gap-2.5">
+            <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-moss-500/12 text-xs font-bold text-moss-400 ring-1 ring-moss-400/25">
               {{ ch.short }}
             </span>
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
+            <div class="min-w-0 flex-1 overflow-hidden">
+              <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                 <h3 class="text-sm font-semibold">
                   {{ ch.name }}
                 </h3>
@@ -68,7 +68,7 @@ const { channels, loading, error, onlineCount, refresh } = useChannels()
                   {{ statusLabel(ch.status) }}
                 </span>
               </div>
-              <p class="mt-0.5 text-[11px] text-[var(--desk-muted)]">
+              <p class="mt-0.5 truncate text-[11px] text-[var(--desk-muted)]">
                 {{ ch.title }}
               </p>
               <p class="truncate text-[11px] text-[var(--desk-muted)]">
@@ -77,40 +77,40 @@ const { channels, loading, error, onlineCount, refresh } = useChannels()
             </div>
           </div>
 
-          <dl class="grid gap-2 text-xs">
+          <dl class="grid min-w-0 gap-2 text-xs">
             <div
               v-if="ch.chatId"
-              class="rounded-xl bg-[var(--desk-elevated)]/80 px-3 py-2 ring-1 ring-[var(--desk-line)]"
+              class="min-w-0 overflow-hidden rounded-xl bg-[var(--desk-elevated)]/80 px-3 py-2 ring-1 ring-[var(--desk-line)]"
             >
               <dt class="text-[10px] uppercase tracking-wide text-[var(--desk-muted)]">
                 chat / group id
               </dt>
-              <dd class="mt-0.5 break-all font-mono text-[11px]">
+              <dd class="mt-0.5 break-all font-mono text-[11px] [overflow-wrap:anywhere]">
                 {{ ch.chatId }}
               </dd>
             </div>
             <div
               v-if="ch.botUsername"
-              class="rounded-xl bg-[var(--desk-elevated)]/80 px-3 py-2 ring-1 ring-[var(--desk-line)]"
+              class="min-w-0 overflow-hidden rounded-xl bg-[var(--desk-elevated)]/80 px-3 py-2 ring-1 ring-[var(--desk-line)]"
             >
               <dt class="text-[10px] uppercase tracking-wide text-[var(--desk-muted)]">
                 бот
               </dt>
-              <dd class="mt-0.5">
+              <dd class="mt-0.5 truncate">
                 @{{ ch.botUsername }}
               </dd>
             </div>
             <div
               v-if="ch.link"
-              class="rounded-xl bg-[var(--desk-elevated)]/80 px-3 py-2 ring-1 ring-[var(--desk-line)]"
+              class="min-w-0 overflow-hidden rounded-xl bg-[var(--desk-elevated)]/80 px-3 py-2 ring-1 ring-[var(--desk-line)]"
             >
               <dt class="text-[10px] uppercase tracking-wide text-[var(--desk-muted)]">
                 ссылка
               </dt>
-              <dd class="mt-0.5">
+              <dd class="mt-0.5 min-w-0">
                 <a
                   :href="ch.link"
-                  class="text-moss-400 hover:underline"
+                  class="block break-all text-moss-400 [overflow-wrap:anywhere] hover:underline"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -120,7 +120,7 @@ const { channels, loading, error, onlineCount, refresh } = useChannels()
             </div>
             <div
               v-if="ch.id !== 'whatsapp'"
-              class="rounded-xl bg-[var(--desk-elevated)]/80 px-3 py-2 ring-1 ring-[var(--desk-line)]"
+              class="min-w-0 overflow-hidden rounded-xl bg-[var(--desk-elevated)]/80 px-3 py-2 ring-1 ring-[var(--desk-line)]"
             >
               <dt class="text-[10px] uppercase tracking-wide text-[var(--desk-muted)]">
                 токен в .env
@@ -131,7 +131,7 @@ const { channels, loading, error, onlineCount, refresh } = useChannels()
             </div>
             <div
               v-if="ch.detail"
-              class="rounded-xl bg-ember-500/10 px-3 py-2 text-ember-300 ring-1 ring-ember-500/25"
+              class="min-w-0 break-all overflow-hidden rounded-xl bg-ember-500/10 px-3 py-2 text-ember-300 ring-1 ring-ember-500/25 [overflow-wrap:anywhere]"
             >
               {{ ch.detail }}
             </div>
@@ -160,11 +160,11 @@ const { channels, loading, error, onlineCount, refresh } = useChannels()
         <h2 class="font-display mb-3 text-sm font-semibold">
           Что нужно для подключения
         </h2>
-        <div class="grid gap-3 md:grid-cols-3">
+        <div class="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           <div
             v-for="ch in channels"
             :key="`need-${ch.id}`"
-            class="desk-surface rounded-2xl p-4"
+            class="desk-surface min-w-0 overflow-hidden rounded-2xl p-4"
           >
             <h3 class="mb-2 text-sm font-semibold text-moss-400">
               {{ ch.name }}

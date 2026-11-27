@@ -40,7 +40,7 @@ function close() {
 </script>
 
 <template>
-  <div class="desk-shell flex min-h-svh text-[var(--desk-ink)]">
+  <div class="desk-shell flex min-h-svh min-w-0 overflow-x-hidden text-[var(--desk-ink)]">
     <div
       v-if="open"
       class="fixed inset-0 z-30 bg-black/50 lg:hidden"
