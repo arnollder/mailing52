@@ -21,9 +21,15 @@ function loadEnv(path) {
 
 loadEnv(resolve(ROOT, '.env'))
 
+if (process.env.WA_SKIP_CONNECT === '1') {
+  console.error('[wa:login] WA_SKIP_CONNECT=1 — для логина временно убери из .env (и не делай это, пока прод онлайн на тех же ключах)')
+  process.exit(1)
+}
+
 const { ensureWa, listGroups, waitUntilOpen, getWaStatus } = await import('../server/wa.mjs')
 
 console.log('[wa:login] auth →', process.env.WA_AUTH_DIR || '.wa-auth')
+console.warn('[wa:login] не гоняй на продовых .wa-auth, пока mailing52-api держит сессию')
 await ensureWa()
 await waitUntilOpen(180_000)
 console.log('[wa:login]', getWaStatus())

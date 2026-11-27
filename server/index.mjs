@@ -18,7 +18,15 @@ function loadEnv(path) {
     for (const line of readFileSync(path, 'utf8').split('\n')) {
       const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
       if (!m) continue
-      if (process.env[m[1]] === undefined) process.env[m[1]] = m[2]
+      let val = m[2]
+      // "foo bar" / 'foo' — иначе кириллица в title ломает shell source, а тут кавычки лишние
+      if (
+        (val.startsWith('"') && val.endsWith('"'))
+        || (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1)
+      }
+      if (process.env[m[1]] === undefined) process.env[m[1]] = val
     }
   } catch {
     /* optional */
@@ -299,17 +307,19 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { ok: false, error: 'Не выбран канал' })
       }
 
+      /** @type {Record<string, { ok?: boolean, error?: string }>} */
       const results = {}
-
+      const jobs = []
       if (channels.includes('max')) {
-        results.max = await sendMax(text)
+        jobs.push(sendMax(text).then(r => { results.max = r }))
       }
       if (channels.includes('telegram')) {
-        results.telegram = await sendTelegram(text)
+        jobs.push(sendTelegram(text).then(r => { results.telegram = r }))
       }
       if (channels.includes('whatsapp')) {
-        results.whatsapp = await sendWaText(text)
+        jobs.push(sendWaText(text).then(r => { results.whatsapp = r }))
       }
+      await Promise.all(jobs)
 
       const anyOk = Object.values(results).some(r => r && r.ok)
       const allOk = channels.every(c => results[c]?.ok)
