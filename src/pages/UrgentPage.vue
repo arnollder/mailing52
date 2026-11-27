@@ -8,11 +8,11 @@ import { channelMeta, urgentHistory, type Channel } from '@/data/mock'
 const toast = useToast()
 const text = ref('')
 const sending = ref(false)
-const channels = ref<Channel[]>(['max'])
+const channels = ref<Channel[]>(['telegram', 'max', 'whatsapp'])
 const confirmOpen = ref(false)
 
 const channelOptions: { label: string, value: Channel, description: string }[] = [
-  { label: 'Telegram', value: 'telegram', description: 'чат рассылки · ждёт ключ' },
+  { label: 'Telegram', value: 'telegram', description: 'канал @mailing_m52 · живо' },
   { label: 'MAX', value: 'max', description: 'канал @se15171561_biz · живо' },
   { label: 'WhatsApp', value: 'whatsapp', description: 'Baileys · группа из WA_GROUP_JID' }
 ]

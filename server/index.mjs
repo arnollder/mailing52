@@ -91,6 +91,40 @@ async function sendMax(text) {
   }
 }
 
+async function sendTelegram(text) {
+  const token = process.env.TELEGRAM_BOT_TOKEN
+  const chatId = process.env.TELEGRAM_CHAT_ID
+  if (!token || !chatId) {
+    return { ok: false, error: 'Telegram не настроен (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)' }
+  }
+
+  const url = `https://api.telegram.org/bot${token}/sendMessage`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text })
+  })
+  const raw = await res.text()
+  let data
+  try {
+    data = JSON.parse(raw)
+  } catch {
+    data = { raw }
+  }
+  if (!res.ok || !data.ok) {
+    return {
+      ok: false,
+      error: data?.description || `Telegram HTTP ${res.status}`,
+      detail: data
+    }
+  }
+  return {
+    ok: true,
+    messageId: data?.result?.message_id ?? null,
+    chatId: data?.result?.chat?.id ?? chatId
+  }
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
 
@@ -140,20 +174,19 @@ const server = createServer(async (req, res) => {
             name: 'Telegram',
             short: 'TG',
             status: telegramStatus,
-            title: process.env.TELEGRAM_CHAT_TITLE || 'Канал рассылки',
+            title: process.env.TELEGRAM_CHAT_TITLE || 'Рассылка Анонимные Наркоманы М52',
             chatId: tgChat,
             hasToken: tgToken,
-            link: process.env.TELEGRAM_CHANNEL_LINK || null,
-            botUsername: process.env.TELEGRAM_BOT_USERNAME || null,
+            link: process.env.TELEGRAM_CHANNEL_LINK || 'https://t.me/mailing_m52',
+            botUsername: process.env.TELEGRAM_BOT_USERNAME || 'ArnolderBot',
             hint: telegramStatus === 'connected'
-              ? 'Bot API · токен в .env'
+              ? `Бот @${process.env.TELEGRAM_BOT_USERNAME || 'ArnolderBot'} · токен в .env`
               : 'Нужны TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в .env',
             detail: null,
             needs: [
-              'Канал / супергруппа рассылки местности',
-              'Токен бота от @BotFather',
-              'Бот — админ с правом публиковать',
-              'TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID в .env на сервере'
+              'Канал https://t.me/mailing_m52',
+              'Бот @ArnolderBot — админ с правом публиковать',
+              'TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID в .env'
             ]
           },
           {
@@ -272,7 +305,7 @@ const server = createServer(async (req, res) => {
         results.max = await sendMax(text)
       }
       if (channels.includes('telegram')) {
-        results.telegram = { ok: false, error: 'Telegram ещё не подключён' }
+        results.telegram = await sendTelegram(text)
       }
       if (channels.includes('whatsapp')) {
         results.whatsapp = await sendWaText(text)

@@ -166,10 +166,10 @@ export const messengers: MessengerChannel[] = [
     id: 'telegram',
     name: 'Telegram',
     short: 'TG',
-    status: 'pending',
-    chatTitle: 'Digital М52 · рассылка',
-    chatId: '',
-    hint: 'Один чат местности · нужен токен и chat_id'
+    status: 'connected',
+    chatTitle: 'Рассылка Анонимные Наркоманы М52',
+    chatId: '-1005955640875',
+    hint: 'Канал @mailing_m52 · бот @ArnolderBot'
   },
   {
     id: 'max',
