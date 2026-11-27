@@ -48,8 +48,8 @@ const needs = [
     title: 'WhatsApp',
     items: [
       'Одна группа WhatsApp на местность',
-      'Green-API / Wazzup: instance + token',
-      'или Meta WABA + id группы (…@g.us)'
+      'Baileys (ветка feat/whatsapp-baileys): pnpm wa:login → QR',
+      'WA_GROUP_JID=…@g.us в .env · сессия в .wa-auth/'
     ]
   }
 ]

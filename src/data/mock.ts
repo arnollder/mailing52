@@ -187,7 +187,7 @@ export const messengers: MessengerChannel[] = [
     status: 'offline',
     chatTitle: 'Digital М52 · рассылка',
     chatId: '',
-    hint: 'Один чат местности · нужен Green-API / WABA'
+    hint: 'Один чат местности · Baileys (локально)'
   }
 ]
 

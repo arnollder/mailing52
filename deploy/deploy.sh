@@ -27,6 +27,11 @@ rsync -az --delete \
   -e "ssh ${SSH_OPTS[*]}" \
   ./server/ "$HOST:$REMOTE_APP/server/"
 
+echo "==> Sync package manifests (API deps: Baileys)"
+rsync -az -e "ssh ${SSH_OPTS[*]}" \
+  ./package.json ./pnpm-lock.yaml ./pnpm-workspace.yaml \
+  "$HOST:$REMOTE_APP/"
+
 echo "==> Sync deploy scripts → $HOST:$REMOTE_APP/deploy"
 rsync -az --delete \
   -e "ssh ${SSH_OPTS[*]}" \
@@ -36,6 +41,13 @@ if [[ -f .env ]]; then
   echo "==> Sync .env (secrets)"
   rsync -az -e "ssh ${SSH_OPTS[*]}" ./.env "$HOST:$REMOTE_APP/.env"
   ssh "${SSH_OPTS[@]}" "$HOST" "chmod 600 $REMOTE_APP/.env && chown mailing52:mailing52 $REMOTE_APP/.env 2>/dev/null || chown root:root $REMOTE_APP/.env"
+fi
+
+# Сессия WhatsApp (Baileys) — только одна живая копия. Локальный API перед деплоем лучше стопнуть.
+if [[ -d .wa-auth ]]; then
+  echo "==> Sync .wa-auth (WhatsApp session)"
+  rsync -az --delete -e "ssh ${SSH_OPTS[*]}" ./.wa-auth/ "$HOST:$REMOTE_APP/.wa-auth/"
+  ssh "${SSH_OPTS[@]}" "$HOST" "chown -R mailing52:mailing52 $REMOTE_APP/.wa-auth && chmod -R u+rwX,go-rwx $REMOTE_APP/.wa-auth"
 fi
 
 echo "==> Remote activate"

@@ -18,7 +18,8 @@ RestartSec=3
 LimitNOFILE=65535
 NoNewPrivileges=true
 PrivateTmp=true
-MemoryMax=200M
+# Baileys держит сокет + ключи; 200M мало
+MemoryMax=450M
 
 [Install]
 WantedBy=multi-user.target
