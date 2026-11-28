@@ -7,9 +7,17 @@ import { channelMeta, type Channel } from '@/data/mock'
 
 const toast = useToast()
 
+type ChannelResult = { ok?: boolean, error?: string, dryRun?: boolean }
+type PackResults = {
+  meditation?: Record<string, ChannelResult>
+  schedule?: Record<string, ChannelResult>
+} | Record<string, ChannelResult>
+
 const loading = ref(false)
 const sending = ref(false)
-const text = ref('')
+const scheduleText = ref('')
+const meditationText = ref('')
+const meditationTitle = ref('')
 const dayName = ref('')
 const count = ref(0)
 const source = ref('')
@@ -23,30 +31,43 @@ const status = ref<{
   error?: string | null
   dryRun?: boolean | null
   dryRunEnv?: boolean | null
-  results?: Record<string, { ok?: boolean, error?: string, dryRun?: boolean }> | null
+  results?: PackResults | null
   dayName?: string | null
   source?: string | null
+  meditationTitle?: string | null
 } | null>(null)
 
 const channels = ref<Channel[]>(['telegram', 'max', 'whatsapp'])
 const allChannels: Channel[] = ['telegram', 'max', 'whatsapp']
 
 const dryRunActive = computed(() => Boolean(status.value?.dryRunEnv || status.value?.dryRun))
+const canSend = computed(() => Boolean(scheduleText.value || meditationText.value))
+
+function flattenResults(results: PackResults | null | undefined): [string, ChannelResult][] {
+  if (!results) return []
+  if ('meditation' in results || 'schedule' in results) {
+    const pack = results as { meditation?: Record<string, ChannelResult>, schedule?: Record<string, ChannelResult> }
+    const out: [string, ChannelResult][] = []
+    for (const [ch, r] of Object.entries(pack.meditation || {})) out.push([`мед/${channelMeta[ch as Channel]?.label || ch}`, r])
+    for (const [ch, r] of Object.entries(pack.schedule || {})) out.push([`расп/${channelMeta[ch as Channel]?.label || ch}`, r])
+    return out
+  }
+  return Object.entries(results as Record<string, ChannelResult>)
+    .map(([k, v]) => [channelMeta[k as Channel]?.label || k, v])
+}
 
 const statusLine = computed(() => {
   const s = status.value
   if (!s?.lastRunAt) return 'Ещё не отправляли'
   const when = new Date(s.lastRunAt).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })
   const trig = s.lastTrigger === 'cron' ? 'авто' : 'вручную'
-  const results = s.results ? Object.values(s.results) : []
+  const flat = flattenResults(s.results)
   const allOk = s.allOk === true || (s.allOk == null && s.lastOk === true)
-  const anyOk = results.length ? results.some(r => r?.ok) : Boolean(s.lastOk)
+  const anyOk = flat.length ? flat.some(([, r]) => r?.ok) : Boolean(s.lastOk)
   const verdict = allOk ? 'ok' : anyOk ? 'частично' : 'fail'
   const dry = s.dryRun ? ' · dry-run' : ''
-  const ch = s.results
-    ? ' · ' + Object.entries(s.results)
-      .map(([k, v]) => `${channelMeta[k as Channel]?.label || k}:${v?.ok ? 'ok' : 'fail'}`)
-      .join(' ')
+  const ch = flat.length
+    ? ' · ' + flat.map(([k, v]) => `${k}:${v?.ok ? 'ok' : 'fail'}`).join(' ')
     : ''
   return `${when} · ${trig} · ${verdict}${dry}${ch}`
 })
@@ -71,16 +92,20 @@ async function loadPreview() {
       source?: string
       warning?: string
       error?: string
+      meditation?: { text?: string, title?: string, warning?: string }
+      digest?: { text?: string, dayName?: string, count?: number, source?: string }
       status?: typeof status.value
     }
     if (!res.ok || !data.ok) {
       error.value = data.error || `HTTP ${res.status}`
       return
     }
-    text.value = data.text || ''
-    dayName.value = data.dayName || ''
-    count.value = data.count || 0
-    source.value = data.source || ''
+    scheduleText.value = data.digest?.text || data.text || ''
+    meditationText.value = data.meditation?.text || ''
+    meditationTitle.value = data.meditation?.title || ''
+    dayName.value = data.digest?.dayName || data.dayName || ''
+    count.value = data.digest?.count || data.count || 0
+    source.value = data.digest?.source || data.source || ''
     warning.value = data.warning || ''
     status.value = data.status || status.value
   } catch (err) {
@@ -116,20 +141,26 @@ async function sendNow() {
       error?: string
       dryRun?: boolean
       digest?: { text?: string, count?: number, dayName?: string, source?: string }
-      results?: Record<string, { ok?: boolean, error?: string }>
+      meditation?: { text?: string, title?: string }
+      results?: PackResults
       status?: typeof status.value
     }
     if (data.digest?.text) {
-      text.value = data.digest.text
+      scheduleText.value = data.digest.text
       count.value = data.digest.count || 0
       dayName.value = data.digest.dayName || dayName.value
       source.value = data.digest.source || source.value
     }
+    if (data.meditation?.text) {
+      meditationText.value = data.meditation.text
+      meditationTitle.value = data.meditation.title || meditationTitle.value
+    }
     if (data.status) status.value = data.status
 
+    const parts = flattenResults(data.results)
+      .map(([k, v]) => `${k}: ${v.ok ? 'ok' : (v.error || 'fail')}`)
+
     if (!res.ok || !data.ok) {
-      const parts = Object.entries(data.results || {})
-        .map(([k, v]) => `${channelMeta[k as Channel]?.label || k}: ${v.ok ? 'ok' : (v.error || 'fail')}`)
       toast.add({
         title: 'Не ушло',
         description: parts.join(' · ') || data.error || `HTTP ${res.status}`,
@@ -138,10 +169,8 @@ async function sendNow() {
       return
     }
     toast.add({
-      title: data.dryRun ? 'Dry-run ok' : (data.allOk ? 'Расписание ушло' : 'Ушло частично'),
-      description: Object.entries(data.results || {})
-        .map(([k, v]) => `${channelMeta[k as Channel]?.label || k}: ${v.ok ? 'ok' : (v.error || 'fail')}`)
-        .join(' · '),
+      title: data.dryRun ? 'Dry-run ok' : (data.allOk ? 'Утренний pack ушёл' : 'Ушло частично'),
+      description: parts.join(' · '),
       tone: data.allOk ? 'success' : 'warning'
     })
   } catch (err) {
@@ -180,7 +209,7 @@ onMounted(() => {
       <button
         type="button"
         class="btn btn-primary btn-sm"
-        :disabled="sending || loading || !text"
+        :disabled="sending || loading || !canSend"
         @click="sendNow"
       >
         <Megaphone class="size-3.5" />
@@ -197,11 +226,11 @@ onMounted(() => {
           SCHEDULE_DRY_RUN — в чаты ничего не уходит, только превью/статус.
         </p>
         <p class="text-sm font-medium">
-          Дайджест на сегодня · авто в 06:00 (Москва)
+          Утро 06:00 (Москва): медитация + расписание — два сообщения
         </p>
         <p class="mt-1 text-sm text-[var(--desk-muted)]">
-          Источник: na-russia.org + online с аннн.рф · ссылки на аннн.рф.
-          Кнопка — если автозапуск не сработал.
+          Медитация и собрания с na-russia.org · ссылки групп на аннн.рф (имя кликабельно в TG/MAX).
+          Кнопка шлёт оба сообщения сразу.
         </p>
         <p class="mt-2 text-xs text-[var(--desk-muted)]">
           Последний запуск: {{ statusLine }}
@@ -252,15 +281,29 @@ onMounted(() => {
       <div class="desk-surface rounded-2xl p-4 sm:p-5">
         <div class="mb-3 flex items-baseline justify-between gap-2">
           <h2 class="font-display text-sm font-semibold">
-            Превью сообщения
+            1. Медитация
           </h2>
           <span class="text-[11px] text-[var(--desk-muted)]">
-            {{ text.length }} символов
+            {{ meditationTitle || '—' }} · {{ meditationText.length }} симв.
           </span>
         </div>
         <pre
-          class="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[var(--desk-elevated)] px-4 py-3 text-sm leading-relaxed ring-1 ring-[var(--desk-line)]"
-        >{{ loading && !text ? 'Загружаю…' : text || 'Пусто' }}</pre>
+          class="max-h-[40vh] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[var(--desk-elevated)] px-4 py-3 text-sm leading-relaxed ring-1 ring-[var(--desk-line)]"
+        >{{ loading && !meditationText ? 'Загружаю…' : meditationText || 'Пусто' }}</pre>
+      </div>
+
+      <div class="desk-surface rounded-2xl p-4 sm:p-5">
+        <div class="mb-3 flex items-baseline justify-between gap-2">
+          <h2 class="font-display text-sm font-semibold">
+            2. Расписание
+          </h2>
+          <span class="text-[11px] text-[var(--desk-muted)]">
+            plain-превью · {{ scheduleText.length }} симв.
+          </span>
+        </div>
+        <pre
+          class="max-h-[50vh] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[var(--desk-elevated)] px-4 py-3 text-sm leading-relaxed ring-1 ring-[var(--desk-line)]"
+        >{{ loading && !scheduleText ? 'Загружаю…' : scheduleText || 'Пусто' }}</pre>
       </div>
     </div>
   </PageShell>

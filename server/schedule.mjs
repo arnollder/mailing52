@@ -6,6 +6,8 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { buildMeditation } from './meditation.mjs'
+import { renderScheduleTexts } from './render.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -385,19 +387,7 @@ export async function buildDigest({ weekday = moscowNow().weekday, useCacheOnFai
     deduped.sort((a, b) => a.time.localeCompare(b.time) || a.sortName.localeCompare(b.sortName, 'ru'))
 
     const dayName = DAY_NAMES[weekday] || ''
-    const lines = [
-      '🔷Расписание собраний🔷',
-      '',
-      dayName,
-      ''
-    ]
-    deduped.forEach((r, i) => {
-      lines.push(`${r.time} - ${r.name} (${r.url}) - ${r.place}`)
-      if (i < deduped.length - 1) lines.push('')
-    })
-    lines.push('')
-    lines.push('* группа, собрание со звездочкой: смотрите на странице группы')
-    const text = lines.join('\n')
+    const texts = renderScheduleTexts({ dayName, rows: deduped })
 
     const payload = {
       ok: true,
@@ -409,7 +399,8 @@ export async function buildDigest({ weekday = moscowNow().weekday, useCacheOnFai
       count: deduped.length,
       groupsUsed: unique.length,
       catalogSize: catalog.size,
-      text,
+      text: texts.plain,
+      texts,
       rows: deduped
     }
     saveJson(CACHE_JSON, payload)
@@ -417,9 +408,14 @@ export async function buildDigest({ weekday = moscowNow().weekday, useCacheOnFai
   } catch (err) {
     if (useCacheOnFail) {
       const cached = loadJson(CACHE_JSON, null)
-      if (cached?.text) {
+      if (cached?.text || cached?.rows?.length) {
+        const texts = cached.texts?.telegram
+          ? cached.texts
+          : renderScheduleTexts({ dayName: cached.dayName || '', rows: cached.rows || [] })
         return {
           ...cached,
+          texts,
+          text: texts.plain || cached.text,
           ok: true,
           source: 'cache',
           warning: err instanceof Error ? err.message : String(err)
@@ -434,6 +430,18 @@ export function scheduleDryRunEnabled() {
   return process.env.SCHEDULE_DRY_RUN === '1'
 }
 
+function flattenChannelResults(results) {
+  if (!results || typeof results !== 'object') return []
+  // новый вид: { meditation: {tg...}, schedule: {tg...} } или плоский {tg...}
+  if (results.meditation || results.schedule) {
+    return [
+      ...Object.values(results.meditation || {}),
+      ...Object.values(results.schedule || {})
+    ]
+  }
+  return Object.values(results)
+}
+
 export function getScheduleStatus() {
   const base = lastStatus || loadJson(STATUS_JSON, {
     lastRunAt: null,
@@ -445,16 +453,13 @@ export function getScheduleStatus() {
     dryRun: null,
     previewChars: null
   })
-  // старые записи: lastOk = anyOk → пересчёт по results
   let allOk = base.allOk
   let lastOk = base.lastOk
-  if (base.results && typeof base.results === 'object') {
-    const vals = Object.values(base.results)
-    if (vals.length) {
-      const computed = vals.every(r => r && r.ok)
-      if (allOk == null) allOk = computed
-      if (lastOk === true && !computed) lastOk = false
-    }
+  const vals = flattenChannelResults(base.results)
+  if (vals.length) {
+    const computed = vals.every(r => r && r.ok)
+    if (allOk == null) allOk = computed
+    if (lastOk === true && !computed) lastOk = false
   }
   return { ...base, allOk, lastOk, dryRunEnv: scheduleDryRunEnabled() }
 }
@@ -466,9 +471,15 @@ function setStatus(patch) {
 }
 
 /**
- * @param {{ sendFn: (text: string, channels: string[]) => Promise<Record<string, {ok?: boolean, error?: string}>>, channels?: string[], trigger?: 'cron'|'manual', dryRun?: boolean }} opts
+ * Утренний pack: медитация + расписание — два сообщения почти одновременно.
+ * @param {{
+ *   sendFn: (texts: {telegram?: string, max?: string, whatsapp?: string, plain?: string}, channels: string[]) => Promise<Record<string, {ok?: boolean, error?: string}>>,
+ *   channels?: string[],
+ *   trigger?: 'cron'|'manual',
+ *   dryRun?: boolean
+ * }} opts
  */
-export async function sendScheduleDigest(opts) {
+export async function sendMorningPack(opts) {
   const {
     sendFn,
     channels = ['telegram', 'max', 'whatsapp'],
@@ -476,54 +487,104 @@ export async function sendScheduleDigest(opts) {
     dryRun = scheduleDryRunEnabled()
   } = opts
 
-  const digest = await buildDigest({ weekday: moscowNow().weekday })
-  if (!digest.text || digest.count === 0) {
-    const status = setStatus({
-      lastRunAt: new Date().toISOString(),
-      lastTrigger: trigger,
-      lastOk: false,
-      allOk: false,
-      error: 'пустой дайджест',
-      results: null,
-      dryRun,
-      previewChars: digest.text?.length || 0,
-      dayName: digest.dayName
-    })
-    return { ok: false, allOk: false, error: 'пустой дайджест', digest, status }
-  }
+  const weekday = moscowNow().weekday
+  const [meditationSettled, digestSettled] = await Promise.allSettled([
+    buildMeditation(),
+    buildDigest({ weekday })
+  ])
+
+  const meditation = meditationSettled.status === 'fulfilled' ? meditationSettled.value : null
+  const digest = digestSettled.status === 'fulfilled' ? digestSettled.value : null
+  const medError = meditationSettled.status === 'rejected'
+    ? (meditationSettled.reason instanceof Error ? meditationSettled.reason.message : String(meditationSettled.reason))
+    : null
+  const digError = digestSettled.status === 'rejected'
+    ? (digestSettled.reason instanceof Error ? digestSettled.reason.message : String(digestSettled.reason))
+    : (!digest?.text || digest.count === 0 ? 'пустой дайджест' : null)
 
   if (dryRun) {
+    const dryCh = Object.fromEntries(channels.map(c => [c, { ok: true, dryRun: true }]))
+    const results = {
+      meditation: medError ? Object.fromEntries(channels.map(c => [c, { ok: false, error: medError }])) : dryCh,
+      schedule: digError ? Object.fromEntries(channels.map(c => [c, { ok: false, error: digError }])) : dryCh
+    }
+    const vals = flattenChannelResults(results)
+    const allOk = vals.length > 0 && vals.every(r => r?.ok)
+    const anyOk = vals.some(r => r?.ok)
     const status = setStatus({
       lastRunAt: new Date().toISOString(),
       lastTrigger: trigger,
-      lastOk: true,
-      allOk: true,
-      error: null,
-      results: Object.fromEntries(channels.map(c => [c, { ok: true, dryRun: true }])),
+      lastOk: allOk,
+      allOk,
+      error: allOk ? null : [medError, digError].filter(Boolean).join('; ') || 'частично',
+      results,
       dryRun: true,
-      previewChars: digest.text.length,
-      dayName: digest.dayName,
-      source: digest.source
+      previewChars: (meditation?.text?.length || 0) + (digest?.text?.length || 0),
+      dayName: digest?.dayName || null,
+      source: digest?.source || null,
+      meditationTitle: meditation?.title || null
     })
-    return { ok: true, allOk: true, dryRun: true, digest, results: status.results, status }
+    return {
+      ok: anyOk,
+      allOk,
+      dryRun: true,
+      meditation,
+      digest,
+      results,
+      status,
+      error: status.error
+    }
   }
 
-  const results = await sendFn(digest.text, channels)
-  const anyOk = Object.values(results).some(r => r && r.ok)
-  const allOk = channels.every(c => results[c]?.ok)
+  const results = { meditation: {}, schedule: {} }
+
+  const jobs = []
+  if (!medError && meditation?.texts) {
+    jobs.push(
+      sendFn(meditation.texts, channels).then((r) => { results.meditation = r })
+    )
+  } else {
+    results.meditation = Object.fromEntries(channels.map(c => [c, { ok: false, error: medError || 'нет текста' }]))
+  }
+  if (!digError && digest?.texts) {
+    jobs.push(
+      sendFn(digest.texts, channels).then((r) => { results.schedule = r })
+    )
+  } else {
+    results.schedule = Object.fromEntries(channels.map(c => [c, { ok: false, error: digError || 'нет текста' }]))
+  }
+  await Promise.all(jobs)
+
+  const vals = flattenChannelResults(results)
+  const allOk = vals.length > 0 && vals.every(r => r?.ok)
+  const anyOk = vals.some(r => r?.ok)
   const status = setStatus({
     lastRunAt: new Date().toISOString(),
     lastTrigger: trigger,
     lastOk: allOk,
     allOk,
-    error: allOk ? null : (anyOk ? 'частично: не все каналы' : 'ни один канал не принял'),
+    error: allOk ? null : (anyOk ? 'частично: медитация и/или расписание' : 'ничего не ушло'),
     results,
     dryRun: false,
-    previewChars: digest.text.length,
-    dayName: digest.dayName,
-    source: digest.source
+    previewChars: (meditation?.text?.length || 0) + (digest?.text?.length || 0),
+    dayName: digest?.dayName || null,
+    source: digest?.source || null,
+    meditationTitle: meditation?.title || null
   })
-  return { ok: anyOk, allOk, digest, results, status }
+  return {
+    ok: anyOk,
+    allOk,
+    meditation,
+    digest,
+    results,
+    status,
+    error: status.error
+  }
+}
+
+/** @deprecated alias — утренний pack */
+export async function sendScheduleDigest(opts) {
+  return sendMorningPack(opts)
 }
 
 /** Крон 06:00 Europe/Moscow, раз в сутки. */

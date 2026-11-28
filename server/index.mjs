@@ -15,9 +15,10 @@ import {
   buildDigest,
   getScheduleStatus,
   moscowNow,
-  sendScheduleDigest,
+  sendMorningPack,
   startScheduleCron
 } from './schedule.mjs'
+import { buildMeditation } from './meditation.mjs'
 import { ensureWa, getWaGroupInfo, getWaQr, getWaStatus, sendWaText } from './wa.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -61,7 +62,7 @@ function requireApiKey(_req, _res, _url) {
   return true
 }
 
-async function sendMax(text) {
+async function sendMax(text, { format } = {}) {
   const token = process.env.MAX_BOT_TOKEN
   const chatId = process.env.MAX_CHAT_ID
   if (!token || !chatId) {
@@ -69,13 +70,15 @@ async function sendMax(text) {
   }
 
   const url = `${MAX_API}/messages?chat_id=${encodeURIComponent(chatId)}`
+  const body = { text }
+  if (format) body.format = format
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       Authorization: token,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ text })
+    body: JSON.stringify(body)
   })
   const raw = await res.text()
   let data
@@ -94,7 +97,7 @@ async function sendMax(text) {
   }
 }
 
-async function sendTelegram(text) {
+async function sendTelegram(text, { parseMode } = {}) {
   const token = process.env.TELEGRAM_BOT_TOKEN
   const chatId = process.env.TELEGRAM_CHAT_ID
   if (!token || !chatId) {
@@ -102,10 +105,12 @@ async function sendTelegram(text) {
   }
 
   const url = `https://api.telegram.org/bot${token}/sendMessage`
+  const payload = { chat_id: chatId, text, disable_web_page_preview: true }
+  if (parseMode) payload.parse_mode = parseMode
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text })
+    body: JSON.stringify(payload)
   })
   const raw = await res.text()
   let data
@@ -130,17 +135,28 @@ async function sendTelegram(text) {
 
 const ALLOWED_CHANNELS = new Set(['telegram', 'max', 'whatsapp'])
 
-async function dispatchChannels(text, channels) {
+function textForChannel(payload, channel) {
+  if (typeof payload === 'string') return payload
+  if (!payload || typeof payload !== 'object') return ''
+  return payload[channel] || payload.plain || payload.default || ''
+}
+
+/** Urgent: один plain-текст на все каналы. Morning pack: объект texts. */
+async function dispatchChannels(payload, channels) {
   /** @type {Record<string, { ok?: boolean, error?: string }>} */
   const results = {}
+  const rich = typeof payload === 'object' && payload !== null && !Array.isArray(payload)
   const jobs = []
   if (channels.includes('max')) {
-    jobs.push(sendMax(text).then(r => { results.max = r }))
+    const text = textForChannel(payload, 'max')
+    jobs.push(sendMax(text, rich ? { format: 'html' } : undefined).then(r => { results.max = r }))
   }
   if (channels.includes('telegram')) {
-    jobs.push(sendTelegram(text).then(r => { results.telegram = r }))
+    const text = textForChannel(payload, 'telegram')
+    jobs.push(sendTelegram(text, rich ? { parseMode: 'HTML' } : undefined).then(r => { results.telegram = r }))
   }
   if (channels.includes('whatsapp')) {
+    const text = textForChannel(payload, 'whatsapp')
     jobs.push(sendWaText(text).then(r => { results.whatsapp = r }))
   }
   await Promise.all(jobs)
@@ -346,7 +362,7 @@ const server = createServer(async (req, res) => {
     }
   }
 
-  // Превью дайджеста на сегодня (без отправки)
+  // Превью: медитация + расписание на сегодня (без отправки)
   if (req.method === 'GET' && url.pathname === '/api/schedule/preview') {
     try {
       const weekdayParam = url.searchParams.get('weekday')
@@ -354,10 +370,38 @@ const server = createServer(async (req, res) => {
       if (!Number.isInteger(weekday) || weekday < 1 || weekday > 7) {
         return json(res, 400, { ok: false, error: 'weekday 1..7' })
       }
-      const digest = await buildDigest({ weekday })
+      const [meditationSettled, digestSettled] = await Promise.allSettled([
+        buildMeditation(),
+        buildDigest({ weekday })
+      ])
+      const meditation = meditationSettled.status === 'fulfilled' ? meditationSettled.value : null
+      const digest = digestSettled.status === 'fulfilled' ? digestSettled.value : null
+      const errors = []
+      if (meditationSettled.status === 'rejected') {
+        errors.push(meditationSettled.reason instanceof Error ? meditationSettled.reason.message : String(meditationSettled.reason))
+      } else if (meditation?.warning) errors.push(`медитация: ${meditation.warning}`)
+      if (digestSettled.status === 'rejected') {
+        errors.push(digestSettled.reason instanceof Error ? digestSettled.reason.message : String(digestSettled.reason))
+      } else if (digest?.warning) errors.push(`расписание: ${digest.warning}`)
+
+      if (!meditation && !digest) {
+        return json(res, 502, {
+          ok: false,
+          error: errors.join('; ') || 'preview failed',
+          status: getScheduleStatus()
+        })
+      }
+
       return json(res, 200, {
         ok: true,
-        ...digest,
+        meditation,
+        digest,
+        // совместимость со старым UI
+        text: digest?.text || '',
+        dayName: digest?.dayName || '',
+        count: digest?.count || 0,
+        source: digest?.source || '',
+        warning: errors.join('; ') || undefined,
         status: getScheduleStatus()
       })
     } catch (err) {
@@ -373,7 +417,7 @@ const server = createServer(async (req, res) => {
     return json(res, 200, { ok: true, status: getScheduleStatus(), moscow: moscowNow() })
   }
 
-  // Принудительная / общая отправка дайджеста
+  // Принудительная отправка morning pack (медитация + расписание)
   if (req.method === 'POST' && url.pathname === '/api/schedule/send') {
     if (!requireApiKey(req, res, url)) return
     try {
@@ -386,7 +430,7 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { ok: false, error: 'Не выбран канал' })
       }
       const dryRun = body.dryRun === true || process.env.SCHEDULE_DRY_RUN === '1'
-      const out = await sendScheduleDigest({
+      const out = await sendMorningPack({
         sendFn: dispatchChannels,
         channels,
         trigger: body.trigger === 'cron' ? 'cron' : 'manual',
@@ -409,12 +453,17 @@ server.listen(PORT, HOST, () => {
   console.log(`mailing52-api http://${HOST}:${PORT}`)
   startScheduleCron(async (trigger) => {
     console.log(`[schedule] ${trigger} start`)
-    const out = await sendScheduleDigest({
+    const out = await sendMorningPack({
       sendFn: dispatchChannels,
       channels: ['telegram', 'max', 'whatsapp'],
       trigger
     })
-    console.log(`[schedule] ${trigger} done`, out.allOk ? 'allOk' : out.ok ? 'partial' : 'fail', out.digest?.count)
+    console.log(
+      `[schedule] ${trigger} done`,
+      out.allOk ? 'allOk' : out.ok ? 'partial' : 'fail',
+      'med=', out.meditation?.title || '—',
+      'meetings=', out.digest?.count
+    )
   })
 
   if (process.env.WA_SKIP_CONNECT === '1' || (process.env.WA_SKIP_CONNECT !== '0' && process.env.WA_ALLOW_CONNECT !== '1' && process.env.NODE_ENV !== 'production' && process.env.WA_PROFILE !== 'prod')) {
