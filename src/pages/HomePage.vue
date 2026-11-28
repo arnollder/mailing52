@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { CalendarPlus, Megaphone, Radio, Upload } from 'lucide-vue-next'
+import { CalendarDays, Megaphone, Radio, Upload } from 'lucide-vue-next'
 import PageShell from '@/components/PageShell.vue'
 import { statusClass, statusLabel, useChannels } from '@/composables/useChannels'
 import { channelMeta, flyers, groups, urgentHistory } from '@/data/mock'
@@ -53,8 +53,8 @@ const channelTotal = computed(() => channels.value.length || 3)
             to="/schedule"
             class="btn btn-primary"
           >
-            <CalendarPlus class="size-4" />
-            Добавить собрание
+            <CalendarDays class="size-4" />
+            Дайджест расписания
           </RouterLink>
           <RouterLink
             to="/flyers"

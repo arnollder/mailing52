@@ -1,57 +1,165 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
-import { Check, Plus, X } from 'lucide-vue-next'
+import { computed, onMounted, ref } from 'vue'
+import { Megaphone, RefreshCw } from 'lucide-vue-next'
 import PageShell from '@/components/PageShell.vue'
 import { useToast } from '@/composables/useToast'
-import { channelMeta, groups, type Channel } from '@/data/mock'
+import { channelMeta, type Channel } from '@/data/mock'
 
 const toast = useToast()
-const search = ref('')
-const open = ref(false)
 
-const form = reactive({
-  group: '',
-  city: 'Н. Новгород',
-  day: '',
-  time: '',
-  address: '',
-  format: 'Открытое',
-  channels: ['telegram', 'max', 'whatsapp'] as Channel[]
-})
+const loading = ref(false)
+const sending = ref(false)
+const text = ref('')
+const dayName = ref('')
+const count = ref(0)
+const source = ref('')
+const warning = ref('')
+const error = ref('')
+const status = ref<{
+  lastRunAt?: string | null
+  lastTrigger?: string | null
+  lastOk?: boolean | null
+  allOk?: boolean | null
+  error?: string | null
+  dryRun?: boolean | null
+  dryRunEnv?: boolean | null
+  results?: Record<string, { ok?: boolean, error?: string, dryRun?: boolean }> | null
+  dayName?: string | null
+  source?: string | null
+} | null>(null)
 
-const formatOptions = ['Открытое', 'Закрытое', 'Онлайн']
+const channels = ref<Channel[]>(['telegram', 'max', 'whatsapp'])
 const allChannels: Channel[] = ['telegram', 'max', 'whatsapp']
 
-const rows = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  if (!q) return groups
-  return groups.filter(g =>
-    [g.group, g.city, g.address, g.day].some(v => v.toLowerCase().includes(q))
-  )
+const dryRunActive = computed(() => Boolean(status.value?.dryRunEnv || status.value?.dryRun))
+
+const statusLine = computed(() => {
+  const s = status.value
+  if (!s?.lastRunAt) return 'Ещё не отправляли'
+  const when = new Date(s.lastRunAt).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })
+  const trig = s.lastTrigger === 'cron' ? 'авто' : 'вручную'
+  const results = s.results ? Object.values(s.results) : []
+  const allOk = s.allOk === true || (s.allOk == null && s.lastOk === true)
+  const anyOk = results.length ? results.some(r => r?.ok) : Boolean(s.lastOk)
+  const verdict = allOk ? 'ok' : anyOk ? 'частично' : 'fail'
+  const dry = s.dryRun ? ' · dry-run' : ''
+  const ch = s.results
+    ? ' · ' + Object.entries(s.results)
+      .map(([k, v]) => `${channelMeta[k as Channel]?.label || k}:${v?.ok ? 'ok' : 'fail'}`)
+      .join(' ')
+    : ''
+  return `${when} · ${trig} · ${verdict}${dry}${ch}`
 })
 
 function toggleChannel(c: Channel) {
-  const i = form.channels.indexOf(c)
-  if (i >= 0) form.channels.splice(i, 1)
-  else form.channels.push(c)
+  const i = channels.value.indexOf(c)
+  if (i >= 0) channels.value.splice(i, 1)
+  else channels.value.push(c)
 }
 
-function saveGroup() {
-  if (!form.group || !form.day || !form.time) {
-    toast.add({ title: 'Заполни группу, дни и время', tone: 'warning' })
+async function loadPreview() {
+  loading.value = true
+  error.value = ''
+  warning.value = ''
+  try {
+    const res = await fetch('/api/schedule/preview')
+    const data = await res.json().catch(() => ({})) as {
+      ok?: boolean
+      text?: string
+      dayName?: string
+      count?: number
+      source?: string
+      warning?: string
+      error?: string
+      status?: typeof status.value
+    }
+    if (!res.ok || !data.ok) {
+      error.value = data.error || `HTTP ${res.status}`
+      return
+    }
+    text.value = data.text || ''
+    dayName.value = data.dayName || ''
+    count.value = data.count || 0
+    source.value = data.source || ''
+    warning.value = data.warning || ''
+    status.value = data.status || status.value
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'сеть'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadStatus() {
+  try {
+    const res = await fetch('/api/schedule/status')
+    const data = await res.json().catch(() => ({})) as { ok?: boolean, status?: typeof status.value }
+    if (res.ok && data.ok) status.value = data.status || null
+  } catch { /* ignore */ }
+}
+
+async function sendNow() {
+  if (!channels.value.length) {
+    toast.add({ title: 'Выбери канал', tone: 'warning' })
     return
   }
-  toast.add({
-    title: 'Пока мок — не сохраняется',
-    description: `${form.group} · ${form.day} ${form.time}`,
-    tone: 'info'
-  })
-  open.value = false
-  form.group = ''
-  form.day = ''
-  form.time = ''
-  form.address = ''
+  sending.value = true
+  try {
+    const res = await fetch('/api/schedule/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channels: channels.value, trigger: 'manual' })
+    })
+    const data = await res.json().catch(() => ({})) as {
+      ok?: boolean
+      allOk?: boolean
+      error?: string
+      dryRun?: boolean
+      digest?: { text?: string, count?: number, dayName?: string, source?: string }
+      results?: Record<string, { ok?: boolean, error?: string }>
+      status?: typeof status.value
+    }
+    if (data.digest?.text) {
+      text.value = data.digest.text
+      count.value = data.digest.count || 0
+      dayName.value = data.digest.dayName || dayName.value
+      source.value = data.digest.source || source.value
+    }
+    if (data.status) status.value = data.status
+
+    if (!res.ok || !data.ok) {
+      const parts = Object.entries(data.results || {})
+        .map(([k, v]) => `${channelMeta[k as Channel]?.label || k}: ${v.ok ? 'ok' : (v.error || 'fail')}`)
+      toast.add({
+        title: 'Не ушло',
+        description: parts.join(' · ') || data.error || `HTTP ${res.status}`,
+        tone: 'error'
+      })
+      return
+    }
+    toast.add({
+      title: data.dryRun ? 'Dry-run ok' : (data.allOk ? 'Расписание ушло' : 'Ушло частично'),
+      description: Object.entries(data.results || {})
+        .map(([k, v]) => `${channelMeta[k as Channel]?.label || k}: ${v.ok ? 'ok' : (v.error || 'fail')}`)
+        .join(' · '),
+      tone: data.allOk ? 'success' : 'warning'
+    })
+  } catch (err) {
+    toast.add({
+      title: 'Сеть / API',
+      description: err instanceof Error ? err.message : 'ошибка',
+      tone: 'error'
+    })
+  } finally {
+    sending.value = false
+    await loadStatus()
+  }
 }
+
+onMounted(() => {
+  loadPreview()
+  loadStatus()
+})
 </script>
 
 <template>
@@ -59,215 +167,100 @@ function saveGroup() {
     <template #actions>
       <button
         type="button"
-        class="btn btn-primary btn-sm"
-        @click="open = true"
+        class="btn btn-ghost btn-sm"
+        :disabled="loading"
+        @click="loadPreview"
       >
-        <Plus class="size-3.5" />
-        Добавить
+        <RefreshCw
+          class="size-3.5"
+          :class="loading ? 'animate-spin' : ''"
+        />
+        Обновить
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        :disabled="sending || loading || !text"
+        @click="sendNow"
+      >
+        <Megaphone class="size-3.5" />
+        {{ sending ? 'Отправка…' : 'Отправить сейчас' }}
       </button>
     </template>
 
-    <template #toolbar>
-      <input
-        v-model="search"
-        class="input w-64"
-        placeholder="Группа, город, адрес…"
-      >
-      <span class="ms-auto text-xs tabular-nums text-[var(--desk-muted)]">
-        {{ rows.length }}
-      </span>
-    </template>
-
-    <div class="desk-page-enter p-4 sm:p-6">
-      <p class="mb-4 max-w-2xl text-sm leading-relaxed text-[var(--desk-muted)]">
-        Рабочие и открытые собрания групп АН М52. По этим данным уходит регулярная рассылка.
-      </p>
-
-      <div class="desk-surface overflow-x-auto rounded-2xl">
-        <table class="w-full min-w-[720px] text-left text-sm">
-          <thead class="bg-[var(--desk-elevated)] text-xs text-[var(--desk-muted)]">
-            <tr>
-              <th class="px-3 py-2.5 font-medium">
-                Группа
-              </th>
-              <th class="px-3 py-2.5 font-medium">
-                Город
-              </th>
-              <th class="px-3 py-2.5 font-medium">
-                Дни
-              </th>
-              <th class="px-3 py-2.5 font-medium">
-                Время
-              </th>
-              <th class="px-3 py-2.5 font-medium">
-                Адрес
-              </th>
-              <th class="px-3 py-2.5 font-medium">
-                Формат
-              </th>
-              <th class="px-3 py-2.5 font-medium">
-                Каналы
-              </th>
-              <th class="px-3 py-2.5" />
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in rows"
-              :key="row.id"
-              class="border-t border-[var(--desk-line)]"
-            >
-              <td class="px-3 py-2.5 font-semibold text-moss-400">
-                {{ row.group }}
-              </td>
-              <td class="px-3 py-2.5">
-                {{ row.city }}
-              </td>
-              <td class="px-3 py-2.5">
-                {{ row.day }}
-              </td>
-              <td class="px-3 py-2.5">
-                {{ row.time }}
-              </td>
-              <td class="px-3 py-2.5 text-[var(--desk-muted)]">
-                {{ row.address }}
-              </td>
-              <td class="px-3 py-2.5">
-                {{ row.format }}
-              </td>
-              <td class="px-3 py-2.5">
-                <div class="flex flex-wrap gap-1">
-                  <span
-                    v-for="c in row.channels"
-                    :key="c"
-                    class="inline-flex size-7 items-center justify-center rounded-lg bg-[var(--desk-elevated)] text-[10px] font-bold text-moss-400 ring-1 ring-[var(--desk-line)]"
-                    :title="channelMeta[c].label"
-                  >
-                    {{ channelMeta[c].short }}
-                  </span>
-                </div>
-              </td>
-              <td class="px-3 py-2.5 text-[11px] text-[var(--desk-muted)]">
-                мок
-              </td>
-            </tr>
-          </tbody>
-        </table>
+    <div class="desk-page-enter mx-auto flex w-full max-w-5xl flex-col gap-5 p-4 sm:p-6">
+      <div class="desk-surface-soft rounded-2xl px-5 py-4">
+        <p
+          v-if="dryRunActive"
+          class="mb-3 rounded-xl bg-warning/15 px-3 py-2 text-xs font-medium text-warning ring-1 ring-warning/40"
+        >
+          SCHEDULE_DRY_RUN — в чаты ничего не уходит, только превью/статус.
+        </p>
+        <p class="text-sm font-medium">
+          Дайджест на сегодня · авто в 06:00 (Москва)
+        </p>
+        <p class="mt-1 text-sm text-[var(--desk-muted)]">
+          Источник: na-russia.org + online с аннн.рф · ссылки на аннн.рф.
+          Кнопка — если автозапуск не сработал.
+        </p>
+        <p class="mt-2 text-xs text-[var(--desk-muted)]">
+          Последний запуск: {{ statusLine }}
+          <span v-if="dayName"> · день: {{ dayName }}</span>
+          <span v-if="count"> · {{ count }} собраний</span>
+          <span v-if="source"> · {{ source }}</span>
+        </p>
+        <p
+          v-if="warning"
+          class="mt-2 text-xs text-warning"
+        >
+          Кэш/предупреждение: {{ warning }}
+        </p>
+        <p
+          v-if="error"
+          class="mt-2 text-xs text-ember-400"
+        >
+          {{ error }}
+        </p>
+        <p
+          v-if="status?.error && status.allOk === false"
+          class="mt-2 text-xs text-ember-400"
+        >
+          Ошибка запуска: {{ status.error }}
+        </p>
       </div>
-    </div>
 
-    <div
-      v-if="open"
-      class="desk-overlay fixed inset-0 z-50 grid place-items-center p-4"
-      @click.self="open = false"
-    >
-      <div class="desk-surface w-full max-w-lg rounded-2xl p-5">
-        <div class="mb-4 flex items-center justify-between gap-3">
-          <h3 class="font-display font-semibold">
-            Новое собрание
-          </h3>
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm"
-            @click="open = false"
+      <div class="field">
+        <span class="field-label">Куда слать</span>
+        <div class="flex flex-wrap gap-2">
+          <label
+            v-for="c in allChannels"
+            :key="c"
+            class="flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm ring-1 ring-[var(--desk-line)]"
+            :class="channels.includes(c) ? 'bg-moss-500/10' : ''"
           >
-            <X class="size-4" />
-          </button>
+            <input
+              type="checkbox"
+              class="accent-moss-500"
+              :checked="channels.includes(c)"
+              @change="toggleChannel(c)"
+            >
+            {{ channelMeta[c].label }}
+          </label>
         </div>
+      </div>
 
-        <div class="grid gap-3 sm:grid-cols-2">
-          <label class="field sm:col-span-2">
-            <span class="field-label">Группа *</span>
-            <input
-              v-model="form.group"
-              class="input"
-              placeholder="Антей"
-            >
-          </label>
-          <label class="field">
-            <span class="field-label">Город</span>
-            <input
-              v-model="form.city"
-              class="input"
-            >
-          </label>
-          <label class="field">
-            <span class="field-label">Формат</span>
-            <select
-              v-model="form.format"
-              class="select"
-            >
-              <option
-                v-for="f in formatOptions"
-                :key="f"
-                :value="f"
-              >
-                {{ f }}
-              </option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="field-label">Дни *</span>
-            <input
-              v-model="form.day"
-              class="input"
-              placeholder="Пн, Ср, Пт"
-            >
-          </label>
-          <label class="field">
-            <span class="field-label">Время *</span>
-            <input
-              v-model="form.time"
-              class="input"
-              placeholder="19:00"
-            >
-          </label>
-          <label class="field sm:col-span-2">
-            <span class="field-label">Адрес</span>
-            <input
-              v-model="form.address"
-              class="input"
-              placeholder="улица, дом, ориентир"
-            >
-          </label>
-          <div class="field sm:col-span-2">
-            <span class="field-label">Каналы рассылки местности</span>
-            <div class="flex flex-wrap gap-2">
-              <label
-                v-for="c in allChannels"
-                :key="c"
-                class="inline-flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm ring-1 ring-[var(--desk-line)]"
-                :class="form.channels.includes(c) ? 'bg-moss-500/15 text-moss-300' : 'text-[var(--desk-muted)]'"
-              >
-                <input
-                  type="checkbox"
-                  class="accent-moss-500"
-                  :checked="form.channels.includes(c)"
-                  @change="toggleChannel(c)"
-                >
-                {{ channelMeta[c].label }}
-              </label>
-            </div>
-          </div>
+      <div class="desk-surface rounded-2xl p-4 sm:p-5">
+        <div class="mb-3 flex items-baseline justify-between gap-2">
+          <h2 class="font-display text-sm font-semibold">
+            Превью сообщения
+          </h2>
+          <span class="text-[11px] text-[var(--desk-muted)]">
+            {{ text.length }} символов
+          </span>
         </div>
-
-        <div class="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            class="btn btn-ghost"
-            @click="open = false"
-          >
-            Отмена
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            @click="saveGroup"
-          >
-            <Check class="size-4" />
-            Сохранить
-          </button>
-        </div>
+        <pre
+          class="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[var(--desk-elevated)] px-4 py-3 text-sm leading-relaxed ring-1 ring-[var(--desk-line)]"
+        >{{ loading && !text ? 'Загружаю…' : text || 'Пусто' }}</pre>
       </div>
     </div>
   </PageShell>

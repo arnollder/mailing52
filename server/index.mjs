@@ -3,13 +3,21 @@
  * Минимальный API рассылки. Токены только из env / .env
  * POST /api/urgent  { text, channels: ["max", "whatsapp", ...] }
  * GET  /api/health
- * Защищено MAILING52_API_KEY: urgent, wa/qr, wa/status
+ * Auth: пока считаем, что доступ уже есть (requireApiKey = always ok).
+ * Позже — сессия/basic auth; ключ в UI служащим не светим.
  */
 import { createServer } from 'node:http'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import QRCode from 'qrcode'
 import { loadEnv } from './load-env.mjs'
+import {
+  buildDigest,
+  getScheduleStatus,
+  moscowNow,
+  sendScheduleDigest,
+  startScheduleCron
+} from './schedule.mjs'
 import { ensureWa, getWaGroupInfo, getWaQr, getWaStatus, sendWaText } from './wa.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -48,29 +56,8 @@ function readBody(req) {
   })
 }
 
-/** X-Api-Key / Bearer / ?key= */
-function extractApiKey(req, url) {
-  const header = req.headers['x-api-key']
-  if (typeof header === 'string' && header) return header
-  const auth = req.headers.authorization
-  if (typeof auth === 'string' && auth.startsWith('Bearer ')) return auth.slice(7)
-  const q = url.searchParams.get('key')
-  return q || ''
-}
-
-function requireApiKey(req, res, url) {
-  const expected = process.env.MAILING52_API_KEY || ''
-  if (!expected) {
-    if (process.env.NODE_ENV === 'production') {
-      json(res, 503, { ok: false, error: 'MAILING52_API_KEY не задан на сервере' })
-      return false
-    }
-    return true
-  }
-  if (extractApiKey(req, url) !== expected) {
-    json(res, 401, { ok: false, error: 'нужен API-ключ (X-Api-Key)' })
-    return false
-  }
+/** Заглушка: аутентификация ещё не включена, проход всегда открыт. */
+function requireApiKey(_req, _res, _url) {
   return true
 }
 
@@ -143,6 +130,23 @@ async function sendTelegram(text) {
 
 const ALLOWED_CHANNELS = new Set(['telegram', 'max', 'whatsapp'])
 
+async function dispatchChannels(text, channels) {
+  /** @type {Record<string, { ok?: boolean, error?: string }>} */
+  const results = {}
+  const jobs = []
+  if (channels.includes('max')) {
+    jobs.push(sendMax(text).then(r => { results.max = r }))
+  }
+  if (channels.includes('telegram')) {
+    jobs.push(sendTelegram(text).then(r => { results.telegram = r }))
+  }
+  if (channels.includes('whatsapp')) {
+    jobs.push(sendWaText(text).then(r => { results.whatsapp = r }))
+  }
+  await Promise.all(jobs)
+  return results
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
 
@@ -152,7 +156,6 @@ const server = createServer(async (req, res) => {
       ok: true,
       max: Boolean(process.env.MAX_BOT_TOKEN && process.env.MAX_CHAT_ID),
       telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
-      apiKey: Boolean(process.env.MAILING52_API_KEY),
       whatsapp: {
         configured: wa.hasGroupJid,
         status: wa.status,
@@ -241,7 +244,7 @@ const server = createServer(async (req, res) => {
             hint: wa.open
               ? `Baileys · сессия open${waGroup?.size != null ? ` · ${waGroup.size} уч.` : ''}`
               : wa.status === 'qr'
-                ? 'Ждёт скана QR (нужен API-ключ)'
+                ? 'Ждёт скана QR (/api/wa/qr)'
                 : 'Baileys · WA_GROUP_JID + сессия .wa-auth',
             detail: wa.lastError || (wa.status !== 'open' ? `baileys:${wa.status}` : null),
             needs: [
@@ -273,7 +276,7 @@ const server = createServer(async (req, res) => {
     return json(res, 200, { ok: true, ...safe })
   }
 
-  // QR локально (png data-URL), без сторонних сервисов. Нужен API-ключ.
+  // QR локально (png data-URL), без сторонних сервисов.
   if (req.method === 'GET' && url.pathname === '/api/wa/qr') {
     if (!requireApiKey(req, res, url)) return
     const qr = getWaQr()
@@ -326,20 +329,7 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { ok: false, error: 'Не выбран канал' })
       }
 
-      /** @type {Record<string, { ok?: boolean, error?: string }>} */
-      const results = {}
-      const jobs = []
-      if (channels.includes('max')) {
-        jobs.push(sendMax(text).then(r => { results.max = r }))
-      }
-      if (channels.includes('telegram')) {
-        jobs.push(sendTelegram(text).then(r => { results.telegram = r }))
-      }
-      if (channels.includes('whatsapp')) {
-        jobs.push(sendWaText(text).then(r => { results.whatsapp = r }))
-      }
-      await Promise.all(jobs)
-
+      const results = await dispatchChannels(text, channels)
       const anyOk = Object.values(results).some(r => r && r.ok)
       const allOk = channels.every(c => results[c]?.ok)
 
@@ -356,14 +346,77 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  // Превью дайджеста на сегодня (без отправки)
+  if (req.method === 'GET' && url.pathname === '/api/schedule/preview') {
+    try {
+      const weekdayParam = url.searchParams.get('weekday')
+      const weekday = weekdayParam ? Number(weekdayParam) : moscowNow().weekday
+      if (!Number.isInteger(weekday) || weekday < 1 || weekday > 7) {
+        return json(res, 400, { ok: false, error: 'weekday 1..7' })
+      }
+      const digest = await buildDigest({ weekday })
+      return json(res, 200, {
+        ok: true,
+        ...digest,
+        status: getScheduleStatus()
+      })
+    } catch (err) {
+      return json(res, 502, {
+        ok: false,
+        error: err instanceof Error ? err.message : 'schedule preview error',
+        status: getScheduleStatus()
+      })
+    }
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/schedule/status') {
+    return json(res, 200, { ok: true, status: getScheduleStatus(), moscow: moscowNow() })
+  }
+
+  // Принудительная / общая отправка дайджеста
+  if (req.method === 'POST' && url.pathname === '/api/schedule/send') {
+    if (!requireApiKey(req, res, url)) return
+    try {
+      const raw = await readBody(req)
+      const body = raw ? JSON.parse(raw) : {}
+      const channels = Array.isArray(body.channels)
+        ? body.channels.filter(c => ALLOWED_CHANNELS.has(c))
+        : ['telegram', 'max', 'whatsapp']
+      if (!channels.length) {
+        return json(res, 400, { ok: false, error: 'Не выбран канал' })
+      }
+      const dryRun = body.dryRun === true || process.env.SCHEDULE_DRY_RUN === '1'
+      const out = await sendScheduleDigest({
+        sendFn: dispatchChannels,
+        channels,
+        trigger: body.trigger === 'cron' ? 'cron' : 'manual',
+        dryRun
+      })
+      return json(res, out.ok ? 200 : 502, out)
+    } catch (err) {
+      return json(res, 500, {
+        ok: false,
+        error: err instanceof Error ? err.message : 'schedule send error',
+        status: getScheduleStatus()
+      })
+    }
+  }
+
   json(res, 404, { ok: false, error: 'not found' })
 })
 
 server.listen(PORT, HOST, () => {
   console.log(`mailing52-api http://${HOST}:${PORT}`)
-  if (!process.env.MAILING52_API_KEY && process.env.NODE_ENV === 'production') {
-    console.warn('[api] MAILING52_API_KEY пуст — urgent/QR закрыты (503)')
-  }
+  startScheduleCron(async (trigger) => {
+    console.log(`[schedule] ${trigger} start`)
+    const out = await sendScheduleDigest({
+      sendFn: dispatchChannels,
+      channels: ['telegram', 'max', 'whatsapp'],
+      trigger
+    })
+    console.log(`[schedule] ${trigger} done`, out.allOk ? 'allOk' : out.ok ? 'partial' : 'fail', out.digest?.count)
+  })
+
   if (process.env.WA_SKIP_CONNECT === '1' || (process.env.WA_SKIP_CONNECT !== '0' && process.env.WA_ALLOW_CONNECT !== '1' && process.env.NODE_ENV !== 'production' && process.env.WA_PROFILE !== 'prod')) {
     console.log('[wa] bootstrap skipped (local profile / WA_SKIP_CONNECT)')
     return

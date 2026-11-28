@@ -2,13 +2,11 @@
 import { computed, ref } from 'vue'
 import { Megaphone } from 'lucide-vue-next'
 import PageShell from '@/components/PageShell.vue'
-import { useApiKey } from '@/composables/useApiKey'
 import { statusLabel, useChannels, type ChannelId } from '@/composables/useChannels'
 import { useToast } from '@/composables/useToast'
 import { channelMeta, urgentHistory, type Channel } from '@/data/mock'
 
 const toast = useToast()
-const { apiHeaders, hasKey } = useApiKey()
 const { channels: liveChannels } = useChannels()
 
 const text = ref('')
@@ -43,20 +41,12 @@ function toggleChannel(c: Channel) {
 
 async function sendNow() {
   if (!canSend.value) return
-  if (!hasKey.value) {
-    toast.add({
-      title: 'Нужен API-ключ',
-      description: 'Вставь MAILING52_API_KEY на странице «Каналы»',
-      tone: 'warning'
-    })
-    return
-  }
   sending.value = true
   confirmOpen.value = false
   try {
     const res = await fetch('/api/urgent', {
       method: 'POST',
-      headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text: text.value.trim(),
         channels: channels.value
@@ -67,15 +57,6 @@ async function sendNow() {
       allOk?: boolean
       error?: string
       results?: Record<string, { ok?: boolean, error?: string, url?: string }>
-    }
-
-    if (res.status === 401) {
-      toast.add({
-        title: 'API-ключ не принят',
-        description: 'Проверь ключ на странице «Каналы»',
-        tone: 'error'
-      })
-      return
     }
 
     if (!res.ok || !data.ok) {
@@ -126,12 +107,6 @@ async function sendNow() {
         </div>
         <p class="mb-4 text-sm leading-relaxed text-[var(--desk-muted)]">
           Текст сразу в общие чаты рассылки местности. Без очереди. Отменить нельзя — глянь ещё раз.
-        </p>
-        <p
-          v-if="!hasKey"
-          class="mb-4 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-[var(--desk-ink)]"
-        >
-          API-ключ ещё не сохранён — вставь его на странице «Каналы», иначе отправка не пройдёт.
         </p>
 
         <label class="field mb-4">

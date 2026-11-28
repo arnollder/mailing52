@@ -15,10 +15,9 @@
           }
           document.documentElement.dataset.theme = t
           document.documentElement.style.colorScheme = t
-          if (t === 'dark') document.documentElement.classList.add('dark')
         } catch (e) {
-          document.documentElement.dataset.theme = 'dark'
-          document.documentElement.style.colorScheme = 'dark'
+          document.documentElement.dataset.theme = 'light'
+          document.documentElement.style.colorScheme = 'light'
         }
       })()
     </script>
