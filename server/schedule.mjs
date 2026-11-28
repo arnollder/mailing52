@@ -21,6 +21,8 @@ const DAY_NAMES = ['', 'Понедельник', 'Вторник', 'Среда',
 const DEFAULT_LOCALITY = 45
 /** Online-группы только на аннн.рф (в na-russia locality 45 их нет). */
 const ANNN_ONLINE_SLUGS = ['utro-online', 'istok-online']
+/** na-russia meeting.types: 9 = рабочее собрание — в дайджест не берём. */
+const MEETING_TYPE_WORKING = 9
 
 let lastStatus = loadJson(STATUS_JSON, null)
 
@@ -261,7 +263,8 @@ async function enrichFromAnnn(slug) {
     { re: /четверг\s*[:\-–—]\s*(\d{1,2})[.:](\d{2})/iu, days: [4] },
     { re: /пятниц[ауы]\s*[:\-–—]\s*(\d{1,2})[.:](\d{2})/iu, days: [5] }
   ]
-  const blob = `${desc}\n${stripHtml(html)}`
+  // Не тащим время из фраз про «рабочее собрание» в обычный дайджест
+  const blob = `${desc}\n${stripHtml(html)}`.replace(/рабочее\s+собрание[\s\S]{0,160}/gi, ' ')
   for (const { re, days } of ranges) {
     for (const m of blob.matchAll(new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`))) {
       const t = `${m[1].padStart(2, '0')}:${m[2]}`
@@ -325,6 +328,7 @@ export async function buildDigest({ weekday = moscowNow().weekday, useCacheOnFai
       const url = slug ? `${ANNN_PUBLIC}/groups/${slug}` : ANNN_PUBLIC
       const name = title || (slug && catalog.get(slug)) || group.name
       for (const meeting of group.meetings || []) {
+        if ((meeting.types || []).includes(MEETING_TYPE_WORKING)) continue
         if (!meetingOnWeekday(meeting, weekday)) continue
         const time = formatTime(meeting.time)
         let place = placeForGroup(group)
